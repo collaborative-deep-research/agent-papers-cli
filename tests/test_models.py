@@ -2,7 +2,7 @@
 
 import pytest
 
-from paper.models import Document, Metadata, Section, Sentence, Span
+from paper.models import Document, Link, Metadata, Section, Sentence, Span
 
 
 class TestDocumentSerialization:
@@ -53,3 +53,48 @@ class TestDocumentSerialization:
         loaded = Document.load(path)
         assert loaded.metadata.title == ""
         assert loaded.sections == []
+
+    def test_roundtrip_with_links(self, tmp_path):
+        doc = Document(
+            metadata=Metadata(title="Link Test", arxiv_id="2302.13971"),
+            sections=[
+                Section(heading="Intro", level=1, content="See [1].",
+                        spans=[Span(start=0, end=20)]),
+            ],
+            raw_text="Intro\nSee [1].",
+            links=[
+                Link(kind="external", text="example", url="https://example.com",
+                     target_page=-1, page=0, span=Span(start=0, end=7)),
+                Link(kind="citation", text="[1]", url="", target_page=-1,
+                     page=0, span=Span(start=10, end=13)),
+                Link(kind="internal", text="Section 2", url="",
+                     target_page=3, page=0, span=Span(start=5, end=14)),
+            ],
+        )
+
+        path = tmp_path / "links.json"
+        doc.save(path)
+        loaded = Document.load(path)
+
+        assert len(loaded.links) == 3
+        assert loaded.links[0].kind == "external"
+        assert loaded.links[0].url == "https://example.com"
+        assert loaded.links[0].span.start == 0
+        assert loaded.links[1].kind == "citation"
+        assert loaded.links[1].text == "[1]"
+        assert loaded.links[2].kind == "internal"
+        assert loaded.links[2].target_page == 3
+
+    def test_load_without_links_field(self, tmp_path):
+        """Loading a JSON without 'links' should default to empty list."""
+        import json
+        data = {
+            "metadata": {"title": "Old Paper"},
+            "sections": [],
+            "raw_text": "",
+            "pages": [],
+        }
+        path = tmp_path / "no_links.json"
+        path.write_text(json.dumps(data))
+        loaded = Document.load(path)
+        assert loaded.links == []

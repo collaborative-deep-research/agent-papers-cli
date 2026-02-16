@@ -18,13 +18,14 @@ from pathlib import Path
 import fitz  # PyMuPDF
 import pysbd
 
-from paper.models import Box, Document, Metadata, Section, Sentence, Span
+from paper.models import Box, Document, Link, Metadata, Section, Sentence, Span
 from paper import storage
 
 # Patterns for filtering false-positive headings
 _ARXIV_HEADER_RE = re.compile(r"arXiv:\d+\.\d+", re.IGNORECASE)
 _SECTION_NUM_RE = re.compile(r"^[A-Z]?\.?\d*\.?\d*$")  # "1", "2.1", "A", "A.1"
 _FIGURE_TABLE_RE = re.compile(r"^(Figure|Table|Fig\.)\s+\d+", re.IGNORECASE)
+_CITATION_RE = re.compile(r"\[(\d+(?:\s*[,;\u2013-]\s*\d+)*)\]")
 
 
 def parse_paper(arxiv_id: str, pdf_path: Path) -> Document:
@@ -82,11 +83,16 @@ def _extract_document(doc_fitz: fitz.Document, arxiv_id: str) -> Document:
         for i, p in enumerate(doc_fitz)
     ]
 
+    # Step 10: Extract links
+    links = _extract_links(doc_fitz, raw_text, lines)
+    links.extend(_detect_citations(raw_text))
+
     return Document(
         metadata=metadata,
         sections=sections,
         raw_text=raw_text,
         pages=pages,
+        links=links,
     )
 
 
@@ -466,3 +472,83 @@ def _extract_metadata(
         arxiv_id=arxiv_id,
         url=f"https://arxiv.org/abs/{arxiv_id}",
     )
+
+
+# TODO(v2): Figure/table refs [ref=f...] — needs caption detection
+def _extract_links(
+    doc_fitz: fitz.Document,
+    raw_text: str,
+    lines: list[_Line],
+) -> list[Link]:
+    """Extract external and internal links from the PDF."""
+    results: list[Link] = []
+    seen_urls: set[str] = set()
+
+    for page_num, page in enumerate(doc_fitz):
+        page_links = page.get_links()
+        for link in page_links:
+            kind_code = link.get("kind", -1)
+            from_rect = link.get("from", fitz.Rect())
+
+            # Find the nearest line to get anchor text and span
+            anchor_text = ""
+            span = Span(start=0, end=0)
+            for ln in lines:
+                if ln.page != page_num:
+                    continue
+                ln_rect = fitz.Rect(ln.bbox)
+                if ln_rect.intersects(fitz.Rect(from_rect)):
+                    anchor_text = ln.text
+                    span = Span(start=ln.char_start, end=ln.char_end)
+                    break
+
+            if kind_code == fitz.LINK_URI:
+                url = link.get("uri", "")
+                if not url or url in seen_urls:
+                    continue
+                seen_urls.add(url)
+                results.append(Link(
+                    kind="external",
+                    text=anchor_text,
+                    url=url,
+                    target_page=-1,
+                    page=page_num,
+                    span=span,
+                ))
+
+            elif kind_code == fitz.LINK_GOTO:
+                target_page = link.get("page", -1)
+                results.append(Link(
+                    kind="internal",
+                    text=anchor_text,
+                    url="",
+                    target_page=target_page,
+                    page=page_num,
+                    span=span,
+                ))
+
+    return results
+
+
+def _detect_citations(raw_text: str) -> list[Link]:
+    """Detect numeric citation markers like [1], [2, 3], [1-5]."""
+    results: list[Link] = []
+    seen: set[str] = set()
+
+    for m in _CITATION_RE.finditer(raw_text):
+        marker = m.group(0)
+        if marker in seen:
+            continue
+        seen.add(marker)
+
+        # Determine which page this citation is on (approximate: char offset 0 = page 0)
+        results.append(Link(
+            kind="citation",
+            text=marker,
+            url="",
+            target_page=-1,
+            page=0,
+            span=Span(start=m.start(), end=m.end()),
+        ))
+
+    return results

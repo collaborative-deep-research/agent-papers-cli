@@ -27,6 +27,17 @@ class Span:
 
 
 @dataclass
+class Link:
+    """A link extracted from the PDF."""
+    kind: str          # "external", "internal", "citation"
+    text: str          # anchor text or citation marker e.g. "[1]"
+    url: str           # URL for external; empty for others
+    target_page: int   # destination page for internal links (-1 if N/A)
+    page: int          # page where the link appears
+    span: Span         # character offset in raw_text
+
+
+@dataclass
 class Sentence:
     """A single sentence within a section."""
     text: str
@@ -63,6 +74,7 @@ class Document:
     sections: list[Section] = field(default_factory=list)
     raw_text: str = ""
     pages: list[dict] = field(default_factory=list)
+    links: list[Link] = field(default_factory=list)
 
     def save(self, path: Path) -> None:
         path.write_text(json.dumps(asdict(self), indent=2, ensure_ascii=False))
@@ -102,9 +114,25 @@ class Document:
                 page_start=s.get("page_start", 0),
                 page_end=s.get("page_end", 0),
             ))
+        links = [
+            Link(
+                kind=lk["kind"],
+                text=lk["text"],
+                url=lk["url"],
+                target_page=lk["target_page"],
+                page=lk["page"],
+                span=Span(
+                    start=lk["span"]["start"],
+                    end=lk["span"]["end"],
+                    boxes=[Box(**b) for b in lk["span"].get("boxes", [])],
+                ),
+            )
+            for lk in data.get("links", [])
+        ]
         return cls(
             metadata=meta,
             sections=sections,
             raw_text=data.get("raw_text", ""),
             pages=data.get("pages", []),
+            links=links,
         )
