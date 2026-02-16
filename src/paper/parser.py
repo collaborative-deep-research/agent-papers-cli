@@ -536,9 +536,22 @@ def _extract_links(
     raw_text: str,
     lines: list[_Line],
 ) -> list[Link]:
-    """Extract external and internal links from the PDF."""
+    """Extract external, internal, and citation links from the PDF.
+
+    Handles three PyMuPDF link kinds:
+    - LINK_URI (2): external URLs
+    - LINK_GOTO (1): internal page jumps
+    - LINK_NAMED (4): named destinations — citation links in LaTeX PDFs
+      have nameddest like "cite.adam"; often split across multiple rects
+      (e.g., "(Kingma & Ba," + "2015)") which we merge by nameddest.
+    """
     results: list[Link] = []
     seen_urls: set[str] = set()
+
+    # Collect LINK_NAMED fragments in document order so we can group
+    # consecutive same-dest fragments on the same page (split citations
+    # like "(Kingma & Ba," + "2015)").
+    named_in_order: list[tuple[str, int, fitz.Rect, int]] = []
 
     for page_num, page in enumerate(doc_fitz):
         page_links = page.get_links()
@@ -546,19 +559,8 @@ def _extract_links(
             kind_code = link.get("kind", -1)
             from_rect = link.get("from", fitz.Rect())
 
-            # Find the nearest line to get anchor text and span
-            anchor_text = ""
-            span = Span(start=0, end=0)
-            for ln in lines:
-                if ln.page != page_num:
-                    continue
-                ln_rect = fitz.Rect(ln.bbox)
-                if ln_rect.intersects(fitz.Rect(from_rect)):
-                    anchor_text = ln.text
-                    span = Span(start=ln.char_start, end=ln.char_end)
-                    break
-
             if kind_code == fitz.LINK_URI:
+                anchor_text, span = _find_anchor(lines, page_num, from_rect)
                 url = link.get("uri", "")
                 if not url or url in seen_urls:
                     continue
@@ -573,6 +575,7 @@ def _extract_links(
                 ))
 
             elif kind_code == fitz.LINK_GOTO:
+                anchor_text, span = _find_anchor(lines, page_num, from_rect)
                 target_page = link.get("page", -1)
                 results.append(Link(
                     kind="internal",
@@ -583,7 +586,75 @@ def _extract_links(
                     span=span,
                 ))
 
+            elif kind_code == fitz.LINK_NAMED:
+                nameddest = link.get("nameddest", "")
+                target_page = link.get("page", -1)
+                if nameddest:
+                    named_in_order.append(
+                        (nameddest, page_num, fitz.Rect(from_rect), target_page)
+                    )
+
+    # Group consecutive same-dest fragments on the same page, then
+    # keep only the first occurrence of each nameddest for the registry.
+    seen_named: set[str] = set()
+    i = 0
+    while i < len(named_in_order):
+        dest, pg, rect, tp = named_in_order[i]
+
+        # Collect consecutive fragments with same dest on same page
+        group_rects = [rect]
+        j = i + 1
+        while j < len(named_in_order):
+            nd, npg, nr, _ntp = named_in_order[j]
+            if nd == dest and npg == pg:
+                group_rects.append(nr)
+                j += 1
+            else:
+                break
+
+        # Build anchor text from the rects in this group
+        page_obj = doc_fitz[pg]
+        text_parts = []
+        for r in group_rects:
+            text = page_obj.get_text("text", clip=r).strip()
+            if text:
+                text_parts.append(text)
+
+        anchor_text = " ".join(text_parts)
+        # Clean up split author-year: "(Kingma & Ba," + "2015)"
+        anchor_text = re.sub(r",\s+", ", ", anchor_text)
+        anchor_text = re.sub(r"\s+\)", ")", anchor_text)
+
+        _, first_span = _find_anchor(lines, pg, group_rects[0])
+        is_citation = dest.startswith("cite.")
+
+        # Only keep the first occurrence per nameddest
+        if dest not in seen_named:
+            seen_named.add(dest)
+            results.append(Link(
+                kind="citation" if is_citation else "internal",
+                text=anchor_text,
+                url="",
+                target_page=tp,
+                page=pg,
+                span=first_span,
+            ))
+
+        i = j
+
     return results
+
+
+def _find_anchor(
+    lines: list[_Line], page_num: int, rect: fitz.Rect
+) -> tuple[str, Span]:
+    """Find the line that intersects a link rect, returning text and span."""
+    for ln in lines:
+        if ln.page != page_num:
+            continue
+        if fitz.Rect(ln.bbox).intersects(fitz.Rect(rect)):
+            return ln.text, Span(start=ln.char_start, end=ln.char_end)
+    return "", Span(start=0, end=0)
 
 
 def _detect_citations(raw_text: str) -> list[Link]:
