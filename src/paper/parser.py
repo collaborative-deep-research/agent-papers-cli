@@ -62,7 +62,9 @@ def _extract_document(doc_fitz: fitz.Document, arxiv_id: str) -> Document:
 
     # Step 4: Try PDF outline first, fall back to font-based headings
     headings = _extract_headings_from_outline(doc_fitz)
-    if not headings:
+    if headings:
+        headings = _resolve_outline_offsets(headings, lines)
+    else:
         headings = _extract_headings_from_fonts(lines, body_size)
 
     # Step 5: Merge adjacent heading fragments (e.g., "1" + "Introduction")
@@ -202,6 +204,60 @@ def _extract_headings_from_outline(doc_fitz: fitz.Document) -> list[dict]:
             "page": page_num - 1,  # 0-indexed
         })
     return headings
+
+
+def _resolve_outline_offsets(
+    headings: list[dict], lines: list[_Line]
+) -> list[dict]:
+    """Match outline headings to lines to populate char_start/char_end.
+
+    Outline headings from get_toc() only have page numbers, not character
+    offsets.  We find each heading's text in the lines on its target page.
+    """
+    resolved = []
+    for h in headings:
+        page = h["page"]
+        heading_text = h["heading"]
+        heading_lower = heading_text.lower().strip()
+
+        best_line = None
+        best_score = 0
+
+        for ln in lines:
+            if ln.page != page:
+                continue
+            ln_lower = ln.text.lower().strip()
+            # Exact match
+            if ln_lower == heading_lower:
+                best_line = ln
+                break
+            # Substring match (heading text appears in line or vice versa)
+            if heading_lower in ln_lower or ln_lower in heading_lower:
+                score = len(heading_lower) / max(len(ln_lower), 1)
+                if score > best_score:
+                    best_score = score
+                    best_line = ln
+
+        if best_line:
+            resolved.append({
+                **h,
+                "char_start": best_line.char_start,
+                "char_end": best_line.char_end,
+            })
+        else:
+            # Fallback: use the first line on the target page
+            for ln in lines:
+                if ln.page == page:
+                    resolved.append({
+                        **h,
+                        "char_start": ln.char_start,
+                        "char_end": ln.char_end,
+                    })
+                    break
+            else:
+                resolved.append(h)
+
+    return resolved
 
 
 def _is_false_positive_heading(text: str, page: int, is_first_heading: bool) -> bool:

@@ -178,6 +178,31 @@ class TestRenderGoto:
         result = render_goto(doc, "c1")
         assert result is True
 
+    def test_goto_section_truncates(self, capsys):
+        """Long sections should be truncated to 10 sentences with a hint."""
+        doc = Document(
+            metadata=Metadata(title="Long Paper", arxiv_id="2302.13971"),
+            sections=[
+                Section(
+                    heading="Methods",
+                    level=1,
+                    content=" ".join(f"Sentence {i}." for i in range(30)),
+                    sentences=[
+                        Sentence(text=f"Sentence {i}.", span=Span(start=i*12, end=i*12+11), page=0)
+                        for i in range(30)
+                    ],
+                    spans=[Span(start=0, end=360)],
+                ),
+            ],
+            raw_text="x" * 360,
+            links=[],
+        )
+        result = render_goto(doc, "s1")
+        assert result is True
+        captured = capsys.readouterr().out
+        assert "Showing 10 of 30 sentences" in captured
+        assert 'paper read 2302.13971 "Methods"' in captured
+
     def test_goto_unknown(self):
         doc = self._make_doc()
         result = render_goto(doc, "z99")

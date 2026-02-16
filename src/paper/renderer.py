@@ -374,13 +374,44 @@ def render_goto(doc: Document, ref_id: str) -> bool:
         console.print("[dim]Use paper outline or paper skim to see available refs.[/dim]")
         return False
 
+    max_sentences = 10
+    paper_id = doc.metadata.arxiv_id
+
     if entry.kind == "section":
-        # Find and render the section
+        # Find and render a preview of the section
         for section in doc.sections:
             if section.heading == entry.target:
                 render_header(doc)
-                render_section(section, refs=True, registry=registry, sec_refs=sec_refs, doc=doc)
-                _print_ref_footer(registry, doc.metadata.arxiv_id)
+
+                # Print heading
+                indent = "  " * (section.level - 1)
+                heading_label = f"{indent}[bold cyan]{section.heading}[/bold cyan]"
+                if section.heading in sec_refs:
+                    heading_label += f" {_ref_tag(sec_refs[section.heading])}"
+                console.print(heading_label)
+                console.print()
+
+                # Print up to max_sentences
+                total = len(section.sentences)
+                shown = section.sentences[:max_sentences]
+                for sent in shown:
+                    text = annotate_text(sent.text, doc, registry)
+                    console.print(f"  {text}")
+
+                if not shown and section.content:
+                    lines = [l.strip() for l in section.content.split("\n") if l.strip()]
+                    total = len(lines)
+                    for line in lines[:max_sentences]:
+                        text = annotate_text(line, doc, registry)
+                        console.print(f"  {text}")
+
+                console.print()
+
+                if total > max_sentences:
+                    console.print(f"[dim]Showing {max_sentences} of {total} sentences. Full section: paper read {paper_id} \"{section.heading}\"[/dim]")
+                    console.print()
+
+                _print_ref_footer(registry, paper_id)
                 return True
         console.print(f"[red]Section not found: {entry.target}[/red]")
         return False
