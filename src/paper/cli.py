@@ -8,6 +8,7 @@ from rich.console import Console
 from paper.fetcher import fetch_paper
 from paper.parser import parse_paper
 from paper.renderer import (
+    build_ref_registry,
     render_full,
     render_goto,
     render_header,
@@ -15,6 +16,8 @@ from paper.renderer import (
     render_search_results,
     render_section,
     render_skim,
+    _print_ref_footer,
+    _section_ref_map,
 )
 
 console = Console()
@@ -98,8 +101,13 @@ def read(reference: str, section: str | None, no_refs: bool):
     if section:
         matched = _find_section(doc, section)
         if matched:
+            refs = not no_refs
+            registry = build_ref_registry(doc) if refs else []
+            sec_refs = _section_ref_map(registry) if refs else {}
             render_header(doc)
-            render_section(matched, refs=not no_refs)
+            render_section(matched, refs=refs, registry=registry, sec_refs=sec_refs, doc=doc)
+            if refs and registry:
+                _print_ref_footer(registry, doc.metadata.arxiv_id)
         else:
             console.print(f"[red]Section \"{section}\" not found.[/red]")
             console.print("[dim]Available sections:[/dim]")
