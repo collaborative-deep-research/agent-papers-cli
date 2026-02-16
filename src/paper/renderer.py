@@ -116,27 +116,61 @@ def _print_ref_footer(registry: list[RefEntry], paper_id: str = "") -> None:
     console.print()
 
 
-def annotate_text(text: str, doc: Document, registry: list[RefEntry]) -> str:
-    """Insert [ref=...] annotations inline for citations and external links.
-
-    Annotates the first occurrence of each citation marker and link anchor text.
-    """
-    # Build lookup maps
-    cite_map: dict[str, str] = {}  # "[1]" -> "c1"
+def _build_cite_span_index(doc: Document, registry: list[RefEntry]) -> list[tuple[int, int, str]]:
+    """Build a list of (start, end, ref_id) for citation links, sorted by start."""
+    # Map citation labels to ref IDs
+    label_to_ref: dict[str, str] = {}
     for entry in registry:
         if entry.kind == "citation":
-            cite_map[entry.label] = entry.ref_id
+            label_to_ref[entry.label] = entry.ref_id
 
-    ext_map: dict[str, str] = {}  # anchor text -> "e1"
+    spans = []
+    for link in doc.links:
+        if link.kind == "citation" and link.text in label_to_ref:
+            spans.append((link.span.start, link.span.end, label_to_ref[link.text]))
+    spans.sort()
+    return spans
+
+
+def annotate_text(
+    text: str, doc: Document, registry: list[RefEntry],
+    span_start: int = -1, span_end: int = -1,
+) -> str:
+    """Append [ref=...] tags for citations that overlap with this text span.
+
+    Uses character-offset overlap when span_start/span_end are provided
+    (reliable — immune to whitespace differences between PDF text and
+    sentence text).  Falls back to regex text matching otherwise.
+    """
+    if not registry:
+        return text
+
+    cite_spans = _build_cite_span_index(doc, registry)
+
+    if span_start >= 0 and span_end >= 0:
+        # Span-based: find citations whose span overlaps [span_start, span_end)
+        found: list[str] = []
+        seen: set[str] = set()
+        for cs, ce, ref_id in cite_spans:
+            if cs >= span_end:
+                break
+            if ce > span_start and ref_id not in seen:
+                found.append(ref_id)
+                seen.add(ref_id)
+        if found:
+            tags = "".join(f"\\[ref={r}]" for r in found)
+            return f"{text} [dim]{tags}[/dim]"
+        return text
+
+    # Fallback: text-based matching for raw content lines without spans
+    label_to_ref: dict[str, str] = {}
     for entry in registry:
-        if entry.kind == "external" and entry.label:
-            ext_map[entry.label] = entry.ref_id
+        if entry.kind == "citation":
+            label_to_ref[entry.label] = entry.ref_id
 
-    # Annotate citations: [1] -> [1][ref=c1]
     annotated = text
-    for marker, ref_id in cite_map.items():
+    for marker, ref_id in label_to_ref.items():
         tag = f"\\[ref={ref_id}]"
-        # Only annotate first occurrence to avoid clutter
         escaped_marker = re.escape(marker)
         annotated = re.sub(escaped_marker, lambda m: f"{m.group(0)}{tag}", annotated, count=1)
 
@@ -214,7 +248,8 @@ def render_section(section: Section, show_heading: bool = True, refs: bool = Tru
     for sentence in section.sentences:
         text = sentence.text
         if refs and doc and registry:
-            text = annotate_text(text, doc, registry)
+            text = annotate_text(text, doc, registry,
+                                 span_start=sentence.span.start, span_end=sentence.span.end)
         console.print(f"  {text}")
 
     if not section.sentences and section.content:
@@ -266,7 +301,8 @@ def render_skim(doc: Document, num_lines: int = 2, max_level: int | None = None,
             for sent in sentences:
                 text = sent.text
                 if refs and registry:
-                    text = annotate_text(text, doc, registry)
+                    text = annotate_text(text, doc, registry,
+                                         span_start=sent.span.start, span_end=sent.span.end)
                 console.print(f"{indent}  [dim]{text}[/dim]")
         elif section.content:
             # Fall back to first lines of raw content
@@ -395,7 +431,8 @@ def render_goto(doc: Document, ref_id: str) -> bool:
                 total = len(section.sentences)
                 shown = section.sentences[:max_sentences]
                 for sent in shown:
-                    text = annotate_text(sent.text, doc, registry)
+                    text = annotate_text(sent.text, doc, registry,
+                                         span_start=sent.span.start, span_end=sent.span.end)
                     console.print(f"  {text}")
 
                 if not shown and section.content:
