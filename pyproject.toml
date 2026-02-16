@@ -19,5 +19,11 @@ dependencies = [
 [project.scripts]
 paper = "paper.cli:cli"
 
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/paper"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

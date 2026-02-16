@@ -89,6 +89,35 @@ Papers are downloaded once and cached in `~/.papers/`.
 
 The parsed structure is cached as JSON so subsequent commands are instant.
 
+## Development
+
+### Run tests
+
+```bash
+uv pip install -e ".[dev]"
+pytest
+```
+
+### Test papers
+
+These papers are useful for manual testing since they cover different PDF structures:
+
+| Paper | ID | Notes |
+|-------|-----|-------|
+| LLaMA (Touvron et al.) | `2302.13971` | No built-in ToC, standard two-column arxiv format |
+| Completion ≠ Collaboration (Shen et al.) | `2510.25744` | Has built-in PDF outline with proper hierarchy |
+| Attention Is All You Need (Vaswani et al.) | `1706.03762` | Classic paper, older arxiv format |
+| DeepSeek-R1 | `2501.12948` | Very long paper (86 pages), stress test for parsing |
+
+```bash
+# Quick smoke test across formats
+paper outline 2302.13971        # font-size heuristic path
+paper outline 2510.25744        # PDF outline path
+paper skim 2302.13971 --lines 1
+paper search 2302.13971 "transformer"
+paper read 2510.25744 "introduction"
+```
+
 ## Known limitations
 
 - Heading detection uses font-size heuristics — works well on standard arxiv papers but may be fragile on unusual templates
