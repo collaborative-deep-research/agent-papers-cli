@@ -44,9 +44,16 @@ def _find_section(doc, section_name: str):
         for i, c in enumerate(candidates, 1):
             console.print(f"  {i}. {c.heading}")
         console.print()
-        choice = click.prompt("Pick a section", type=int, default=1)
-        if 1 <= choice <= len(candidates):
-            return candidates[choice - 1]
+        # In non-interactive mode (piped stdin), default to first match
+        import sys
+        if not sys.stdin.isatty():
+            return candidates[0]
+        try:
+            choice = click.prompt("Pick a section", type=int, default=1)
+            if 1 <= choice <= len(candidates):
+                return candidates[choice - 1]
+        except (EOFError, click.Abort):
+            return candidates[0]
 
     # Fallback: word overlap
     query_words = set(name_lower.split())

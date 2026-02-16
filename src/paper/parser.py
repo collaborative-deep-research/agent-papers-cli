@@ -35,11 +35,8 @@ def parse_paper(arxiv_id: str, pdf_path: Path) -> Document:
     if storage.has_parsed(arxiv_id):
         return Document.load(storage.parsed_path(arxiv_id))
 
-    doc_fitz = fitz.open(pdf_path)
-    try:
+    with fitz.open(pdf_path) as doc_fitz:
         document = _extract_document(doc_fitz, arxiv_id)
-    finally:
-        doc_fitz.close()
 
     # Cache the parsed result
     document.save(storage.parsed_path(arxiv_id))
@@ -134,7 +131,7 @@ def _extract_lines(doc_fitz: fitz.Document) -> list[_Line]:
                     size_weight[size] += len(text)
                     fname = span.get("font", "")
                     font_names[fname] += len(text)
-                    if "bold" in fname.lower() or "Medi" in fname:
+                    if "bold" in fname.lower() or "Medium" in fname or fname.endswith("-Medi"):
                         any_bold = True
 
                 merged_text = " ".join(parts).strip()
@@ -342,7 +339,9 @@ def _merge_heading_fragments(headings: list[dict]) -> list[dict]:
             i + 1 < len(headings)
             and _SECTION_NUM_RE.match(h["heading"].strip())
             and headings[i + 1]["page"] == h["page"]
-            and abs(headings[i + 1].get("font_size", 0) - h.get("font_size", 0)) < 1.0
+            and "font_size" in headings[i + 1]
+            and "font_size" in h
+            and abs(headings[i + 1]["font_size"] - h["font_size"]) < 1.0
         ):
             next_h = headings[i + 1]
             merged.append({

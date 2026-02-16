@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import os
 import re
+import tempfile
 from pathlib import Path
 
 import httpx
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, DownloadColumn
 
 from paper import storage
+
+# Default download timeout in seconds. Override with PAPER_DOWNLOAD_TIMEOUT env var.
+DEFAULT_TIMEOUT = int(os.environ.get("PAPER_DOWNLOAD_TIMEOUT", "120"))
 
 # Patterns for arxiv ID extraction
 ARXIV_ID_PATTERNS = [
@@ -42,7 +47,8 @@ def abs_url_for_id(arxiv_id: str) -> str:
 def fetch_paper(reference: str) -> tuple[str, Path]:
     """Fetch a paper PDF, returning (arxiv_id, pdf_path).
 
-    Downloads if not already cached.
+    Downloads if not already cached. Uses atomic write to prevent
+    corrupt files from interrupted downloads.
     """
     arxiv_id = resolve_arxiv_id(reference)
     if arxiv_id is None:
@@ -57,24 +63,38 @@ def fetch_paper(reference: str) -> tuple[str, Path]:
     url = pdf_url_for_id(arxiv_id)
     dest = storage.pdf_path(arxiv_id)
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        DownloadColumn(),
-    ) as progress:
-        task = progress.add_task(f"Downloading {arxiv_id}...", total=None)
+    # Download to a temp file first, then rename on success
+    tmp_fd, tmp_path = tempfile.mkstemp(
+        dir=dest.parent, suffix=".download", prefix="paper_"
+    )
+    tmp_file = Path(tmp_path)
 
-        with httpx.stream("GET", url, follow_redirects=True, timeout=60) as response:
-            response.raise_for_status()
-            total = int(response.headers.get("content-length", 0))
-            if total:
-                progress.update(task, total=total)
+    try:
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            DownloadColumn(),
+        ) as progress:
+            task = progress.add_task(f"Downloading {arxiv_id}...", total=None)
 
-            with open(dest, "wb") as f:
-                for chunk in response.iter_bytes(chunk_size=8192):
-                    f.write(chunk)
-                    progress.advance(task, len(chunk))
+            with httpx.stream("GET", url, follow_redirects=True, timeout=DEFAULT_TIMEOUT) as response:
+                response.raise_for_status()
+                total = int(response.headers.get("content-length", 0))
+                if total:
+                    progress.update(task, total=total)
+
+                with os.fdopen(tmp_fd, "wb") as f:
+                    for chunk in response.iter_bytes(chunk_size=8192):
+                        f.write(chunk)
+                        progress.advance(task, len(chunk))
+
+        # Atomic rename on success
+        tmp_file.rename(dest)
+    except Exception:
+        # Clean up partial download
+        tmp_file.unlink(missing_ok=True)
+        raise
 
     # Save basic metadata
     storage.save_metadata(arxiv_id, {

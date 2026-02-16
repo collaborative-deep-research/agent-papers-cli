@@ -13,6 +13,36 @@ def tmp_papers_dir(tmp_path, monkeypatch):
     return tmp_path
 
 
+class TestSanitizePaperId:
+    def test_normal_id(self):
+        assert storage._sanitize_paper_id("2302.13971") == "2302.13971"
+
+    def test_path_traversal(self):
+        result = storage._sanitize_paper_id("../etc/passwd")
+        assert "/" not in result
+        assert not result.startswith(".")
+
+    def test_backslash(self):
+        result = storage._sanitize_paper_id("..\\etc\\passwd")
+        assert "\\" not in result
+        assert not result.startswith(".")
+
+    def test_leading_dots(self):
+        assert storage._sanitize_paper_id("...test") == "test"
+
+    def test_empty_raises(self):
+        with pytest.raises(ValueError):
+            storage._sanitize_paper_id("")
+
+    def test_only_dots_raises(self):
+        with pytest.raises(ValueError):
+            storage._sanitize_paper_id("...")
+
+    def test_old_style_arxiv(self):
+        # Old-style IDs like cs/0601001 become cs_0601001
+        assert storage._sanitize_paper_id("cs/0601001") == "cs_0601001"
+
+
 class TestStorage:
     def test_paper_dir_creates_directory(self, tmp_papers_dir):
         d = storage.paper_dir("2302.13971")
@@ -50,3 +80,22 @@ class TestStorage:
 
     def test_list_papers_empty(self, tmp_papers_dir):
         assert storage.list_papers() == {}
+
+
+class TestCorruptedJson:
+    def test_corrupted_index_returns_empty(self, tmp_papers_dir):
+        tmp_papers_dir.mkdir(parents=True, exist_ok=True)
+        (tmp_papers_dir / "index.json").write_text("{invalid json")
+        assert storage.list_papers() == {}
+
+    def test_corrupted_metadata_returns_none(self, tmp_papers_dir):
+        d = storage.paper_dir("2302.13971")
+        (d / "metadata.json").write_text("not json at all")
+        assert storage.load_metadata("2302.13971") is None
+
+    def test_corrupted_index_recovers_on_update(self, tmp_papers_dir):
+        tmp_papers_dir.mkdir(parents=True, exist_ok=True)
+        (tmp_papers_dir / "index.json").write_text("{bad")
+        storage.update_index("2302.13971", "LLaMA")
+        papers = storage.list_papers()
+        assert papers["2302.13971"] == "LLaMA"
