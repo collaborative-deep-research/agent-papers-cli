@@ -10,7 +10,8 @@ from rich.panel import Panel
 from rich.text import Text
 from rich.tree import Tree
 
-from paper.models import Document, Section
+from paper.models import Document, Link, Section
+from paper import storage
 
 console = Console()
 
@@ -393,6 +394,135 @@ def render_search_results(
     return match_count
 
 
+def _resolve_citation_text(
+    doc: Document, cite_link: Link | None, entry: RefEntry
+) -> str | None:
+    """Resolve citation to its full reference text.
+
+    Strategy 1: If the link has a target page, open the cached PDF, search
+    for the author name on that page, and extract the reference entry.
+    Strategy 2: Search for the citation in a References/Bibliography section
+    using text matching (for numeric citations).
+    """
+    # Strategy 1: Search the target page in the PDF for the author name
+    if cite_link and cite_link.target_page >= 0:
+        pdf_path = storage.pdf_path(doc.metadata.arxiv_id)
+        if pdf_path.exists():
+            ref_text = _extract_ref_from_pdf(pdf_path, cite_link)
+            if ref_text:
+                return ref_text
+
+    # Strategy 2: Search in References/Bibliography section (numeric citations)
+    ref_section = None
+    for section in doc.sections:
+        heading_lower = section.heading.lower()
+        if "reference" in heading_lower or "bibliography" in heading_lower:
+            ref_section = section
+            break
+
+    if ref_section:
+        nums = re.findall(r"\d+", entry.label)
+        if nums:
+            for num in nums:
+                pattern = re.compile(
+                    rf"(?:^|\n)\s*\[?{re.escape(num)}\]?[\.\)]\s*(.+?)(?=\n\s*\[?\d+\]?[\.\)]|\Z)",
+                    re.DOTALL,
+                )
+                match = pattern.search(ref_section.content)
+                if match:
+                    ref_text = match.group(0).strip()
+                    return re.sub(r"\s+", " ", ref_text)
+
+    return None
+
+
+def _extract_ref_from_pdf(pdf_path, cite_link: Link) -> str | None:
+    """Open the PDF and extract reference text by searching the target page.
+
+    LaTeX named destinations often have inaccurate y-coordinates, so
+    we search for the author surname on the target page instead.
+    """
+    try:
+        import fitz
+    except ImportError:
+        return None
+
+    # Extract author surname from citation text
+    # "(Kingma & Ba, 2015)" -> "Kingma"
+    # "(Zhao et al., 2024)" -> "Zhao"
+    # "Houlsby et al., 2019;" -> "Houlsby"
+    author = re.match(r"\(?\s*([A-Z][a-z]+)", cite_link.text)
+    if not author:
+        return None
+    surname = author.group(1)
+
+    # Also extract the year for disambiguation
+    year_match = re.search(r"\d{4}", cite_link.text)
+    year = year_match.group(0) if year_match else ""
+
+    try:
+        with fitz.open(pdf_path) as pdf:
+            page = pdf[cite_link.target_page]
+
+            # Search for "Surname," on the target page
+            instances = page.search_for(f"{surname},")
+            if not instances:
+                instances = page.search_for(surname)
+            if not instances:
+                return None
+
+            # Filter to instances near a column margin (start of a bib entry).
+            # Two-column layouts have left col at ~35-80pt, right col at ~290-320pt.
+            # Entries that appear mid-line (indented continuations or co-author
+            # mentions) have higher x0 values within their column.
+            pw = page.rect.width
+            col2_start = pw / 2 - 20  # ~290 for 612pt page
+            margin_instances = [
+                r for r in instances
+                if r.x0 < 100 or (col2_start < r.x0 < col2_start + 50)
+            ]
+            candidates = margin_instances if margin_instances else instances
+
+            # If multiple matches, prefer the one whose surrounding text
+            # contains the year (disambiguates "Zhao" in other entries)
+            best_rect = candidates[0]
+            if year and len(candidates) > 1:
+                for r in candidates:
+                    clip = fitz.Rect(0, r.y0 - 2, page.rect.width, r.y0 + 40)
+                    nearby = page.get_text("text", clip=clip)
+                    if year in nearby:
+                        best_rect = r
+                        break
+
+            # Extract text from the matched position, constrained to the
+            # correct column in two-column layouts
+            if best_rect.x0 > pw / 2 - 20:
+                # Right column
+                col_left = pw / 2 - 20
+                col_right = pw
+            else:
+                # Left column (or single-column)
+                col_left = 0
+                col_right = pw / 2 - 20 if pw > 500 else pw
+
+            clip = fitz.Rect(col_left, best_rect.y0 + 1, col_right, best_rect.y0 + 42)
+            text = page.get_text("text", clip=clip).strip()
+
+            if not text:
+                return None
+
+            # Clean up and trim to start from the author surname
+            text = re.sub(r"\s+", " ", text)
+            idx = text.find(f"{surname},")
+            if idx == -1:
+                idx = text.find(surname)
+            if idx > 0:
+                text = text[idx:]
+            return text
+    except Exception:
+        return None
+
+
 def render_goto(doc: Document, ref_id: str) -> bool:
     """Jump to a reference. Returns True if found, False otherwise."""
     registry = build_ref_registry(doc)
@@ -476,36 +606,19 @@ def render_goto(doc: Document, ref_id: str) -> bool:
         console.print(f"  [bold]Citation {entry.ref_id}:[/bold] {entry.label}")
         console.print()
 
-        # Try to find the matching entry in a References section
-        ref_section = None
-        for section in doc.sections:
-            heading_lower = section.heading.lower()
-            if "reference" in heading_lower or "bibliography" in heading_lower:
-                ref_section = section
+        # Find the matching Link to get target coordinates
+        cite_link = None
+        for link in doc.links:
+            if link.kind == "citation" and link.text == entry.label:
+                cite_link = link
                 break
 
-        if ref_section:
-            # Extract the number from the citation marker, e.g. "[1]" -> "1"
-            nums = re.findall(r"\d+", entry.label)
-            if nums:
-                # Search for the reference entry in the section content
-                for num in nums:
-                    # Look for patterns like "[1]" or "1." at start of line in references
-                    pattern = re.compile(
-                        rf"(?:^|\n)\s*\[?{re.escape(num)}\]?[\.\)]\s*(.+?)(?=\n\s*\[?\d+\]?[\.\)]|\Z)",
-                        re.DOTALL,
-                    )
-                    match = pattern.search(ref_section.content)
-                    if match:
-                        ref_text = match.group(0).strip()
-                        # Clean up and limit length
-                        ref_text = re.sub(r"\s+", " ", ref_text)
-                        console.print(f"  [dim]{ref_text}[/dim]")
-                        console.print()
+        ref_text = _resolve_citation_text(doc, cite_link, entry)
+        if ref_text:
+            console.print(f"  [dim]{ref_text}[/dim]")
         else:
-            console.print("  [dim]No References section found in this paper.[/dim]")
-            console.print()
-
+            console.print("  [dim]Could not resolve reference text.[/dim]")
+        console.print()
         return True
 
     return False

@@ -589,9 +589,11 @@ def _extract_links(
             elif kind_code == fitz.LINK_NAMED:
                 nameddest = link.get("nameddest", "")
                 target_page = link.get("page", -1)
+                to_point = link.get("to")
+                target_xy = [to_point.x, to_point.y] if to_point else []
                 if nameddest:
                     named_in_order.append(
-                        (nameddest, page_num, fitz.Rect(from_rect), target_page)
+                        (nameddest, page_num, fitz.Rect(from_rect), target_page, target_xy)
                     )
 
     # Group consecutive same-dest fragments on the same page, then
@@ -599,13 +601,13 @@ def _extract_links(
     seen_named: set[str] = set()
     i = 0
     while i < len(named_in_order):
-        dest, pg, rect, tp = named_in_order[i]
+        dest, pg, rect, tp, txy = named_in_order[i]
 
         # Collect consecutive fragments with same dest on same page
         group_rects = [rect]
         j = i + 1
         while j < len(named_in_order):
-            nd, npg, nr, _ntp = named_in_order[j]
+            nd, npg, nr, _ntp, _ntxy = named_in_order[j]
             if nd == dest and npg == pg:
                 group_rects.append(nr)
                 j += 1
@@ -638,6 +640,8 @@ def _extract_links(
                 target_page=tp,
                 page=pg,
                 span=first_span,
+                target_xy=txy,
+                dest_name=dest,
             ))
 
         i = j

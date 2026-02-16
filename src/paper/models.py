@@ -35,6 +35,8 @@ class Link:
     target_page: int   # destination page for internal links (-1 if N/A)
     page: int          # page where the link appears
     span: Span         # character offset in raw_text
+    target_xy: list[float] = field(default_factory=list)  # [x, y] on target page
+    dest_name: str = ""  # named destination e.g. "cite.adam"
 
 
 @dataclass
@@ -126,6 +128,8 @@ class Document:
                     end=lk["span"]["end"],
                     boxes=[Box(**b) for b in lk["span"].get("boxes", [])],
                 ),
+                target_xy=lk.get("target_xy", []),
+                dest_name=lk.get("dest_name", ""),
             )
             for lk in data.get("links", [])
         ]
