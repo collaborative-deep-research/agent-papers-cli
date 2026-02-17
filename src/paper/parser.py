@@ -18,13 +18,14 @@ from pathlib import Path
 import fitz  # PyMuPDF
 import pysbd
 
-from paper.models import Box, Document, Metadata, Section, Sentence, Span
+from paper.models import Box, Document, Link, Metadata, Section, Sentence, Span
 from paper import storage
 
 # Patterns for filtering false-positive headings
 _ARXIV_HEADER_RE = re.compile(r"arXiv:\d+\.\d+", re.IGNORECASE)
 _SECTION_NUM_RE = re.compile(r"^[A-Z]?\.?\d*\.?\d*$")  # "1", "2.1", "A", "A.1"
 _FIGURE_TABLE_RE = re.compile(r"^(Figure|Table|Fig\.)\s+\d+", re.IGNORECASE)
+_CITATION_RE = re.compile(r"\[(\d+(?:\s*[,;\u2013-]\s*\d+)*)\]")
 
 
 def parse_paper(arxiv_id: str, pdf_path: Path) -> Document:
@@ -61,7 +62,9 @@ def _extract_document(doc_fitz: fitz.Document, arxiv_id: str) -> Document:
 
     # Step 4: Try PDF outline first, fall back to font-based headings
     headings = _extract_headings_from_outline(doc_fitz)
-    if not headings:
+    if headings:
+        headings = _resolve_outline_offsets(headings, lines)
+    else:
         headings = _extract_headings_from_fonts(lines, body_size)
 
     # Step 5: Merge adjacent heading fragments (e.g., "1" + "Introduction")
@@ -82,11 +85,16 @@ def _extract_document(doc_fitz: fitz.Document, arxiv_id: str) -> Document:
         for i, p in enumerate(doc_fitz)
     ]
 
+    # Step 10: Extract links
+    links = _extract_links(doc_fitz, raw_text, lines)
+    links.extend(_detect_citations(raw_text))
+
     return Document(
         metadata=metadata,
         sections=sections,
         raw_text=raw_text,
         pages=pages,
+        links=links,
     )
 
 
@@ -198,6 +206,60 @@ def _extract_headings_from_outline(doc_fitz: fitz.Document) -> list[dict]:
     return headings
 
 
+def _resolve_outline_offsets(
+    headings: list[dict], lines: list[_Line]
+) -> list[dict]:
+    """Match outline headings to lines to populate char_start/char_end.
+
+    Outline headings from get_toc() only have page numbers, not character
+    offsets.  We find each heading's text in the lines on its target page.
+    """
+    resolved = []
+    for h in headings:
+        page = h["page"]
+        heading_text = h["heading"]
+        heading_lower = heading_text.lower().strip()
+
+        best_line = None
+        best_score = 0
+
+        for ln in lines:
+            if ln.page != page:
+                continue
+            ln_lower = ln.text.lower().strip()
+            # Exact match
+            if ln_lower == heading_lower:
+                best_line = ln
+                break
+            # Substring match (heading text appears in line or vice versa)
+            if heading_lower in ln_lower or ln_lower in heading_lower:
+                score = len(heading_lower) / max(len(ln_lower), 1)
+                if score > best_score:
+                    best_score = score
+                    best_line = ln
+
+        if best_line:
+            resolved.append({
+                **h,
+                "char_start": best_line.char_start,
+                "char_end": best_line.char_end,
+            })
+        else:
+            # Fallback: use the first line on the target page
+            for ln in lines:
+                if ln.page == page:
+                    resolved.append({
+                        **h,
+                        "char_start": ln.char_start,
+                        "char_end": ln.char_end,
+                    })
+                    break
+            else:
+                resolved.append(h)
+
+    return resolved
+
+
 def _is_false_positive_heading(text: str, page: int, is_first_heading: bool) -> bool:
     """Filter out things that look like headings but aren't."""
     # arxiv header line
@@ -207,7 +269,12 @@ def _is_false_positive_heading(text: str, page: int, is_first_heading: bool) -> 
     if _FIGURE_TABLE_RE.match(text):
         return True
     # Very long text is not a heading
-    if len(text) > 120:
+    if len(text) > 80:
+        return True
+    # Text with colon followed by content (body text pattern like
+    # "Example: the model predicted..." or "backstory: Jaxon said...")
+    colon_idx = text.find(": ")
+    if colon_idx >= 0 and len(text) - colon_idx > 4:
         return True
     # Text ending with period that doesn't look like a numbered section
     # (e.g., "English CommonCrawl [67%].", "Rotary Embeddings [GPTNeo]. We remove the")
@@ -215,14 +282,17 @@ def _is_false_positive_heading(text: str, page: int, is_first_heading: bool) -> 
         return True
     if ". " in text and len(text) > 60:
         return True
-    # Purely numeric / table data (e.g., "88.0 81.1", "24.9 31.0")
+    # Purely numeric / table data (e.g., "88.0 81.1", "88.0", "24.9 31.0")
+    # but NOT short section numbers like "3", "4.1", "12"
     if re.match(r"^[\d\s.,\-+%]+$", text):
+        stripped = text.strip()
+        if not (_SECTION_NUM_RE.match(stripped) and len(stripped) <= 3):
+            return True
+    # Author lists (contain ∗ † or affiliation symbols ♣ ♢ ♠)
+    if any(c in text for c in "∗†♣♢♠♦♯♮"):
         return True
-    # Author lists (contain ∗ or multiple commas typical of name lists)
-    if "∗" in text or "†" in text:
-        return True
-    # Text ending with comma or question mark (not a heading)
-    if text.endswith(",") or text.endswith("?"):
+    # Text ending with comma, question mark, or hyphen (word break)
+    if text.endswith(",") or text.endswith("?") or text.endswith("-"):
         return True
     return False
 
@@ -247,8 +317,11 @@ def _extract_headings_from_fonts(
     size_to_level = {size: i + 1 for i, size in enumerate(heading_sizes)}
     bold_heading_level = len(heading_sizes) + 1
 
-    # Identify title font size (largest on page 0) to exclude it
-    page0 = [ln for ln in lines if ln.page == 0]
+    # Identify title font size (largest on page 0, excluding arXiv header)
+    page0 = [
+        ln for ln in lines
+        if ln.page == 0 and not _ARXIV_HEADER_RE.search(ln.text)
+    ]
     title_size = max((ln.font_size for ln in page0), default=0) if page0 else 0
 
     headings = []
@@ -262,8 +335,8 @@ def _extract_headings_from_fonts(
         level = 0
 
         if ln.font_size > heading_threshold:
-            # Skip title-sized text (title itself)
-            if ln.font_size >= title_size and ln.page == 0:
+            # Skip title-sized text (title + subtitle, within 1pt)
+            if ln.font_size >= title_size - 1.0 and ln.page == 0:
                 continue
             # On page 0, before we've seen a real section heading,
             # only accept things that look like actual sections (not author names)
@@ -298,7 +371,8 @@ def _looks_like_section_heading(text: str) -> bool:
     # Section with number: "1 Introduction", "2.1 Data", "A Appendix"
     if re.match(r"^[A-Z]?\d*\.?\d*\s+[A-Z]", text):
         return True
-    # Common heading keywords
+    # Common heading keywords — only trusted for short, capitalized text
+    # (body text like "Our experiments are conducted..." also contains these)
     keywords = [
         "abstract", "introduction", "related work", "background",
         "method", "approach", "model", "experiment", "result",
@@ -308,23 +382,37 @@ def _looks_like_section_heading(text: str) -> bool:
         "setup", "dataset", "training", "implementation",
     ]
     text_lower = text.lower()
-    for kw in keywords:
-        if kw in text_lower:
-            return True
+    if text[0].isupper() and len(text) < 40:
+        for kw in keywords:
+            if kw in text_lower:
+                return True
     # Bare section number: "1", "2", "A", "B.1"
     if _SECTION_NUM_RE.match(text):
         return True
-    # Short capitalized text without mid-sentence punctuation (likely heading)
+    # Short capitalized text without mid-sentence punctuation (likely heading).
+    # For multi-word text, check title case: the last substantive word should
+    # be capitalized to distinguish headings from body text fragments like
+    # "Communicating Desires as Demands pressures".
     if len(text) < 50 and text[0].isupper() and not text.endswith(".") and ". " not in text:
-        return True
+        words = text.split()
+        if len(words) <= 3:
+            return True
+        # Check that last non-trivial word (>3 chars) is capitalized
+        substantive = [w for w in words if len(w) > 3 and w.isalpha()]
+        if substantive and substantive[-1][0].isupper():
+            return True
     return False
+
+
+_TRAILING_CONJUNCTIONS = {"and", "or", "of", "for", "in", "the", "with", "to", "a", "an", "on", "by"}
 
 
 def _merge_heading_fragments(headings: list[dict]) -> list[dict]:
     """Merge consecutive headings that are fragments of the same heading.
 
-    E.g., section number "1" followed by "Introduction" on the next line
-    should become "1 Introduction".
+    Handles two cases:
+    1. Bare section number followed by title: "1" + "Introduction"
+    2. Heading ending with conjunction: "Detection and" + "Reframing"
     """
     if len(headings) < 2:
         return headings
@@ -338,6 +426,46 @@ def _merge_heading_fragments(headings: list[dict]) -> list[dict]:
         if (
             i + 1 < len(headings)
             and _SECTION_NUM_RE.match(h["heading"].strip())
+            and headings[i + 1]["page"] == h["page"]
+            and "font_size" in headings[i + 1]
+            and "font_size" in h
+            and abs(headings[i + 1]["font_size"] - h["font_size"]) < 1.0
+        ):
+            next_h = headings[i + 1]
+            combined = {
+                "heading": f"{h['heading']} {next_h['heading']}",
+                "level": min(h["level"], next_h["level"]),
+                "page": h["page"],
+                "char_start": h["char_start"],
+                "char_end": next_h["char_end"],
+            }
+            i += 2
+            # Continue merging while heading looks incomplete:
+            # - ends with conjunction/preposition, OR
+            # - next heading is a single non-number word (continuation like
+            #   "3" + "Non-Violent Communication" + "Framework")
+            while (
+                i < len(headings)
+                and headings[i]["page"] == combined["page"]
+                and "font_size" in headings[i]
+                and abs(headings[i].get("font_size", 0) - next_h.get("font_size", 0)) < 1.0
+                and (
+                    combined["heading"].split()[-1].lower() in _TRAILING_CONJUNCTIONS
+                    or (
+                        len(headings[i]["heading"].split()) == 1
+                        and not _SECTION_NUM_RE.match(headings[i]["heading"].strip())
+                    )
+                )
+            ):
+                combined["heading"] += f" {headings[i]['heading']}"
+                combined["char_end"] = headings[i]["char_end"]
+                i += 1
+            merged.append(combined)
+
+        # Heading ending with conjunction: merge with next
+        elif (
+            i + 1 < len(headings)
+            and h["heading"].split()[-1].lower() in _TRAILING_CONJUNCTIONS
             and headings[i + 1]["page"] == h["page"]
             and "font_size" in headings[i + 1]
             and "font_size" in h
@@ -466,3 +594,166 @@ def _extract_metadata(
         arxiv_id=arxiv_id,
         url=f"https://arxiv.org/abs/{arxiv_id}",
     )
+
+
+# TODO(v2): Figure/table refs [ref=f...] — needs caption detection
+def _extract_links(
+    doc_fitz: fitz.Document,
+    raw_text: str,
+    lines: list[_Line],
+) -> list[Link]:
+    """Extract external, internal, and citation links from the PDF.
+
+    Handles three PyMuPDF link kinds:
+    - LINK_URI (2): external URLs
+    - LINK_GOTO (1): internal page jumps
+    - LINK_NAMED (4): named destinations — citation links in LaTeX PDFs
+      have nameddest like "cite.adam"; often split across multiple rects
+      (e.g., "(Kingma & Ba," + "2015)") which we merge by nameddest.
+    """
+    results: list[Link] = []
+    seen_urls: set[str] = set()
+
+    # Collect LINK_NAMED fragments in document order so we can group
+    # consecutive same-dest fragments on the same page (split citations
+    # like "(Kingma & Ba," + "2015)").
+    named_in_order: list[tuple[str, int, fitz.Rect, int]] = []
+
+    for page_num, page in enumerate(doc_fitz):
+        page_links = page.get_links()
+        for link in page_links:
+            kind_code = link.get("kind", -1)
+            from_rect = link.get("from", fitz.Rect())
+
+            if kind_code == fitz.LINK_URI:
+                anchor_text, span = _find_anchor(lines, page_num, from_rect)
+                url = link.get("uri", "")
+                if not url or url in seen_urls:
+                    continue
+                seen_urls.add(url)
+                results.append(Link(
+                    kind="external",
+                    text=anchor_text,
+                    url=url,
+                    target_page=-1,
+                    page=page_num,
+                    span=span,
+                ))
+
+            elif kind_code == fitz.LINK_GOTO:
+                anchor_text, span = _find_anchor(lines, page_num, from_rect)
+                target_page = link.get("page", -1)
+                results.append(Link(
+                    kind="internal",
+                    text=anchor_text,
+                    url="",
+                    target_page=target_page,
+                    page=page_num,
+                    span=span,
+                ))
+
+            elif kind_code == fitz.LINK_NAMED:
+                nameddest = link.get("nameddest", "")
+                target_page = link.get("page", -1)
+                to_point = link.get("to")
+                target_xy = [to_point.x, to_point.y] if to_point else []
+                if nameddest:
+                    named_in_order.append(
+                        (nameddest, page_num, fitz.Rect(from_rect), target_page, target_xy)
+                    )
+
+    # Group consecutive same-dest fragments on the same page, then
+    # keep only the first occurrence of each nameddest for the registry.
+    seen_named: set[str] = set()
+    i = 0
+    while i < len(named_in_order):
+        dest, pg, rect, tp, txy = named_in_order[i]
+
+        # Collect consecutive fragments with same dest on same page
+        group_rects = [rect]
+        j = i + 1
+        while j < len(named_in_order):
+            nd, npg, nr, _ntp, _ntxy = named_in_order[j]
+            if nd == dest and npg == pg:
+                group_rects.append(nr)
+                j += 1
+            else:
+                break
+
+        # Build anchor text from the rects in this group
+        page_obj = doc_fitz[pg]
+        text_parts = []
+        for r in group_rects:
+            text = page_obj.get_text("text", clip=r).strip()
+            if text:
+                text_parts.append(text)
+
+        anchor_text = " ".join(text_parts)
+        # Clean up split author-year: "(Kingma & Ba," + "2015)"
+        anchor_text = re.sub(r",\s+", ", ", anchor_text)
+        anchor_text = re.sub(r"\s+\)", ")", anchor_text)
+
+        # Use union of first and last fragment spans so cross-line
+        # citations (surname on one line, year on the next) are covered.
+        _, first_span = _find_anchor(lines, pg, group_rects[0])
+        if len(group_rects) > 1:
+            _, last_span = _find_anchor(lines, pg, group_rects[-1])
+            link_span = Span(start=first_span.start, end=max(first_span.end, last_span.end))
+        else:
+            link_span = first_span
+        is_citation = dest.startswith("cite.")
+
+        # Keep all citation occurrences (different spans for each location
+        # in the paper) but dedup non-citation named links.
+        if is_citation or dest not in seen_named:
+            seen_named.add(dest)
+            results.append(Link(
+                kind="citation" if is_citation else "internal",
+                text=anchor_text,
+                url="",
+                target_page=tp,
+                page=pg,
+                span=link_span,
+                target_xy=txy,
+                dest_name=dest,
+            ))
+
+        i = j
+
+    return results
+
+
+def _find_anchor(
+    lines: list[_Line], page_num: int, rect: fitz.Rect
+) -> tuple[str, Span]:
+    """Find the line that intersects a link rect, returning text and span."""
+    for ln in lines:
+        if ln.page != page_num:
+            continue
+        if fitz.Rect(ln.bbox).intersects(fitz.Rect(rect)):
+            return ln.text, Span(start=ln.char_start, end=ln.char_end)
+    return "", Span(start=0, end=0)
+
+
+def _detect_citations(raw_text: str) -> list[Link]:
+    """Detect numeric citation markers like [1], [2, 3], [1-5]."""
+    results: list[Link] = []
+    seen: set[str] = set()
+
+    for m in _CITATION_RE.finditer(raw_text):
+        marker = m.group(0)
+        if marker in seen:
+            continue
+        seen.add(marker)
+
+        # Determine which page this citation is on (approximate: char offset 0 = page 0)
+        results.append(Link(
+            kind="citation",
+            text=marker,
+            url="",
+            target_page=-1,
+            page=0,
+            span=Span(start=m.start(), end=m.end()),
+        ))
+
+    return results

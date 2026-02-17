@@ -8,12 +8,15 @@ from rich.console import Console
 from paper.fetcher import fetch_paper
 from paper.parser import parse_paper
 from paper.renderer import (
+    build_ref_registry,
     render_full,
+    render_goto,
     render_header,
     render_outline,
     render_search_results,
     render_section,
     render_skim,
+    _print_ref_footer,
 )
 
 console = Console()
@@ -81,7 +84,8 @@ def cli():
 @cli.command()
 @click.argument("reference")
 @click.argument("section", required=False, default=None)
-def read(reference: str, section: str | None):
+@click.option("--no-refs", is_flag=True, default=False, help="Hide [ref=...] annotations.")
+def read(reference: str, section: str | None, no_refs: bool):
     """Read a paper (full or specific section).
 
     REFERENCE: arxiv ID or URL (e.g., 2301.12345)
@@ -96,8 +100,12 @@ def read(reference: str, section: str | None):
     if section:
         matched = _find_section(doc, section)
         if matched:
+            refs = not no_refs
+            registry = build_ref_registry(doc) if refs else []
             render_header(doc)
-            render_section(matched)
+            render_section(matched, refs=refs, registry=registry, doc=doc)
+            if refs and registry:
+                _print_ref_footer(registry, doc.metadata.arxiv_id)
         else:
             console.print(f"[red]Section \"{section}\" not found.[/red]")
             console.print("[dim]Available sections:[/dim]")
@@ -105,12 +113,13 @@ def read(reference: str, section: str | None):
                 console.print(f"  {'  ' * (s.level - 1)}{s.heading}")
             raise SystemExit(1)
     else:
-        render_full(doc)
+        render_full(doc, refs=not no_refs)
 
 
 @cli.command()
 @click.argument("reference")
-def outline(reference: str):
+@click.option("--no-refs", is_flag=True, default=False, help="Hide [ref=...] annotations.")
+def outline(reference: str, no_refs: bool):
     """Show paper outline/table of contents.
 
     REFERENCE: arxiv ID or URL (e.g., 2301.12345)
@@ -121,14 +130,15 @@ def outline(reference: str):
         console.print(f"[red]Error: {e}[/red]")
         raise SystemExit(1)
 
-    render_outline(doc)
+    render_outline(doc, refs=not no_refs)
 
 
 @cli.command()
 @click.argument("reference")
 @click.option("--lines", "-n", default=2, help="Number of sentences per section.")
 @click.option("--level", "-l", default=None, type=int, help="Max heading level to show.")
-def skim(reference: str, lines: int, level: int | None):
+@click.option("--no-refs", is_flag=True, default=False, help="Hide [ref=...] annotations.")
+def skim(reference: str, lines: int, level: int | None, no_refs: bool):
     """Skim a paper (headings + first N sentences).
 
     REFERENCE: arxiv ID or URL (e.g., 2301.12345)
@@ -139,14 +149,15 @@ def skim(reference: str, lines: int, level: int | None):
         console.print(f"[red]Error: {e}[/red]")
         raise SystemExit(1)
 
-    render_skim(doc, num_lines=lines, max_level=level)
+    render_skim(doc, num_lines=lines, max_level=level, refs=not no_refs)
 
 
 @cli.command()
 @click.argument("reference")
 @click.argument("query")
 @click.option("--context", "-c", default=2, help="Lines of context around matches.")
-def search(reference: str, query: str, context: int):
+@click.option("--no-refs", is_flag=True, default=False, help="Hide [ref=...] annotations.")
+def search(reference: str, query: str, context: int, no_refs: bool):
     """Search for keywords in a paper.
 
     REFERENCE: arxiv ID or URL (e.g., 2301.12345)
@@ -158,12 +169,13 @@ def search(reference: str, query: str, context: int):
         console.print(f"[red]Error: {e}[/red]")
         raise SystemExit(1)
 
-    render_search_results(doc, query, context_lines=context)
+    render_search_results(doc, query, context_lines=context, refs=not no_refs)
 
 
 @cli.command()
 @click.argument("reference")
-def info(reference: str):
+@click.option("--no-refs", is_flag=True, default=False, help="Hide [ref=...] annotations.")
+def info(reference: str, no_refs: bool):
     """Show paper metadata.
 
     REFERENCE: arxiv ID or URL (e.g., 2301.12345)
@@ -181,3 +193,22 @@ def info(reference: str):
     console.print(f"  Sentences: {total_sentences}")
     console.print(f"  Characters: {len(doc.raw_text)}")
     console.print()
+
+
+@cli.command()
+@click.argument("reference")
+@click.argument("ref_id")
+def goto(reference: str, ref_id: str):
+    """Jump to a reference shown in paper output.
+
+    REFERENCE: arxiv ID or URL (e.g., 2301.12345)
+    REF_ID: a reference like s3, e1, c5
+    """
+    try:
+        doc = _load(reference)
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise SystemExit(1)
+
+    if not render_goto(doc, ref_id):
+        raise SystemExit(1)

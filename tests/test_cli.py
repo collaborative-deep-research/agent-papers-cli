@@ -41,6 +41,17 @@ class TestCLI:
         result = runner.invoke(cli, ["info", "--help"])
         assert result.exit_code == 0
 
+    def test_goto_help(self, runner):
+        result = runner.invoke(cli, ["goto", "--help"])
+        assert result.exit_code == 0
+        assert "REF_ID" in result.output
+
+    def test_no_refs_flag(self, runner):
+        """All commands that accept --no-refs should show it in help."""
+        for cmd in ["read", "outline", "skim", "search", "info"]:
+            result = runner.invoke(cli, [cmd, "--help"])
+            assert "--no-refs" in result.output, f"--no-refs missing from {cmd}"
+
     def test_invalid_reference(self, runner):
         result = runner.invoke(cli, ["outline", "not-a-paper"])
         assert result.exit_code != 0
