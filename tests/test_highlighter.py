@@ -37,8 +37,8 @@ class TestToScaledPosition:
         result = to_scaled_position(rects, 612.0, 792.0, 1)
 
         assert result["boundingRect"]["pageNumber"] == 1
-        assert result["boundingRect"]["x1"] == pytest.approx(72.0 / 612.0 * 100, abs=0.01)
-        assert result["boundingRect"]["y1"] == pytest.approx(100.0 / 792.0 * 100, abs=0.01)
+        assert result["boundingRect"]["x1"] == pytest.approx(72.0 / 612.0, abs=0.0001)
+        assert result["boundingRect"]["y1"] == pytest.approx(100.0 / 792.0, abs=0.0001)
         assert len(result["rects"]) == 1
 
     def test_multiple_rects_bounding(self):
@@ -49,8 +49,8 @@ class TestToScaledPosition:
         result = to_scaled_position(rects, 612.0, 792.0, 1)
 
         # Bounding rect should encompass both
-        assert result["boundingRect"]["x1"] == pytest.approx(72.0 / 612.0 * 100, abs=0.01)
-        assert result["boundingRect"]["y2"] == pytest.approx(124.0 / 792.0 * 100, abs=0.01)
+        assert result["boundingRect"]["x1"] == pytest.approx(72.0 / 612.0, abs=0.0001)
+        assert result["boundingRect"]["y2"] == pytest.approx(124.0 / 792.0, abs=0.0001)
         assert len(result["rects"]) == 2
 
     def test_empty_rects(self):
@@ -77,7 +77,9 @@ class TestMatchToJson:
         result = match_to_json(match, sample_doc)
 
         assert result["selectedText"] == "Some matched text"
+        assert result["content"]["text"] == "Some matched text"
         assert result["pageIndex"] == 0
+        assert result["type"] == "text"
         assert result["position"]["boundingRect"]["pageNumber"] == 1
         assert "rects" in result["position"]
 

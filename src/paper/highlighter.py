@@ -102,14 +102,14 @@ def to_scaled_position(
     """Convert absolute PDF rects to normalized ScaledPosition format.
 
     Output matches react-pdf-highlighter-extended's ScaledPosition:
-    coordinates normalized to 0-100 range (percentage of page dimensions).
+    coordinates normalized to 0-1 range (fraction of page dimensions).
     """
     scaled_rects = []
     for r in rects:
-        x1 = (r["x0"] / page_width) * 100
-        y1 = (r["y0"] / page_height) * 100
-        x2 = (r["x1"] / page_width) * 100
-        y2 = (r["y1"] / page_height) * 100
+        x1 = r["x0"] / page_width
+        y1 = r["y0"] / page_height
+        x2 = r["x1"] / page_width
+        y2 = r["y1"] / page_height
         scaled_rects.append({
             "x1": round(x1, 4),
             "y1": round(y1, 4),
@@ -154,10 +154,13 @@ def match_to_json(match: dict, doc: Document) -> dict:
         page_num + 1,  # 1-indexed for the app
     )
 
+    # Matches the app's POST /api/reader/{documentId}/highlights format
     return {
+        "position": position,
+        "content": {"text": match.get("context", "").strip()},
         "selectedText": match.get("context", "").strip(),
         "pageIndex": page_num,
-        "position": position,
+        "type": "text",
     }
 
 
