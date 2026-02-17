@@ -192,6 +192,31 @@ def info(reference: str):
     console.print()
 
 
+def _print_match_list(matches: list[dict], match_range: str | None, total: int) -> None:
+    """Print a slice of matches. Uses --range if given, else first DEFAULT_MATCH_RANGE."""
+    if match_range:
+        start, end = _parse_range(match_range, total)
+    else:
+        start, end = 0, min(total, DEFAULT_MATCH_RANGE)
+
+    for i, m in enumerate(matches[start:end], start + 1):
+        context = m.get("context", "")
+        if len(context) > 100:
+            context = context[:97] + "..."
+        console.print(f"  [bold yellow]{i}.[/bold yellow] page {m['page'] + 1}: {context}")
+
+    remaining_before = start
+    remaining_after = total - end
+    hints = []
+    if remaining_before > 0:
+        hints.append(f"{remaining_before} before")
+    if remaining_after > 0:
+        hints.append(f"{remaining_after} after")
+    if hints:
+        console.print(f"  [dim]... {' / '.join(hints)} (use --range START:END to paginate, e.g., --range {end + 1}:{end + DEFAULT_MATCH_RANGE})[/dim]")
+    console.print()
+
+
 # --- Highlight command group ---
 
 @cli.group()
@@ -222,7 +247,27 @@ def highlight_search(reference: str, query: str, context: int):
     render_highlight_matches(matches, query, doc)
 
 
-MAX_MATCHES_SHOWN = 20
+DEFAULT_MATCH_RANGE = 20
+
+
+def _parse_range(range_str: str, total: int) -> tuple[int, int]:
+    """Parse a range string like '5:10', ':10', '5:' into (start, end) 0-indexed.
+
+    Input indices are 1-indexed. Returns 0-indexed (start, end) for slicing.
+    """
+    parts = range_str.split(":")
+    if len(parts) != 2:
+        raise click.BadParameter(f"Invalid range '{range_str}'. Use START:END (e.g., 1:20, 21:40).")
+    start_str, end_str = parts
+    start = int(start_str) - 1 if start_str.strip() else 0
+    end = int(end_str) if end_str.strip() else total
+    if start < 0:
+        start = 0
+    if end > total:
+        end = total
+    if start >= end:
+        raise click.BadParameter(f"Empty range {start + 1}:{end} (total matches: {total}).")
+    return start, end
 
 
 @highlight.command("add")
@@ -233,8 +278,8 @@ MAX_MATCHES_SHOWN = 20
 @click.option("--return-json", "return_json", is_flag=True, default=False, help="Output app-compatible JSON.")
 @click.option("--pick", type=int, default=None, help="Select match N directly (1-indexed). Use with highlight search to find the right index.")
 @click.option("--interactive", "-i", is_flag=True, default=False, help="Interactively pick a match when multiple are found.")
-@click.option("--max-matches", type=int, default=MAX_MATCHES_SHOWN, help=f"Max matches to display (default: {MAX_MATCHES_SHOWN}).")
-def highlight_add(reference: str, query: str, color: str, note: str, return_json: bool, pick: int | None, interactive: bool, max_matches: int):
+@click.option("--range", "match_range", default=None, help="Range of matches to display, e.g., 1:20, 21:40 (1-indexed).")
+def highlight_add(reference: str, query: str, color: str, note: str, return_json: bool, pick: int | None, interactive: bool, match_range: str | None):
     """Find text and add a highlight.
 
     REFERENCE: arxiv ID or URL (e.g., 2301.12345)
@@ -269,18 +314,7 @@ def highlight_add(reference: str, query: str, color: str, note: str, return_json
             raise SystemExit(1)
         selected = matches[pick - 1]
     elif interactive:
-        console.print(f"  [bold]{len(matches)} matches found:[/bold]")
-        console.print()
-        display_count = min(len(matches), max_matches)
-        for i, m in enumerate(matches[:display_count], 1):
-            context = m.get("context", "")
-            if len(context) > 100:
-                context = context[:97] + "..."
-            console.print(f"  [bold yellow]{i}.[/bold yellow] page {m['page'] + 1}: {context}")
-        if len(matches) > display_count:
-            console.print(f"  [dim]... and {len(matches) - display_count} more (use --max-matches to see more)[/dim]")
-        console.print()
-
+        _print_match_list(matches, match_range, len(matches))
         try:
             choice = click.prompt("Pick a match", type=int, default=1)
             if 1 <= choice <= len(matches):
@@ -294,15 +328,7 @@ def highlight_add(reference: str, query: str, color: str, note: str, return_json
         # Default: non-interactive — list matches and exit
         console.print(f"  [bold]{len(matches)} matches found.[/bold] Use [cyan]--pick N[/cyan] to select one:")
         console.print()
-        display_count = min(len(matches), max_matches)
-        for i, m in enumerate(matches[:display_count], 1):
-            context = m.get("context", "")
-            if len(context) > 100:
-                context = context[:97] + "..."
-            console.print(f"  [bold yellow]{i}.[/bold yellow] page {m['page'] + 1}: {context}")
-        if len(matches) > display_count:
-            console.print(f"  [dim]... and {len(matches) - display_count} more (use --max-matches to see all)[/dim]")
-        console.print()
+        _print_match_list(matches, match_range, len(matches))
         console.print(f"  [dim]Example: paper highlight add {reference} \"{query}\" --pick 1[/dim]")
         console.print(f"  [dim]Or use --interactive for a prompt.[/dim]")
         raise SystemExit(0)
