@@ -100,3 +100,21 @@ def list_papers() -> dict[str, str]:
     if p.exists():
         return _safe_json_load(p, fallback={}) or {}
     return {}
+
+
+def highlights_path(paper_id: str) -> Path:
+    return paper_dir(paper_id) / "highlights.json"
+
+
+def load_highlights(paper_id: str) -> list[dict]:
+    p = highlights_path(paper_id)
+    if p.exists():
+        return _safe_json_load(p, fallback=[]) or []
+    return []
+
+
+def save_highlights(paper_id: str, highlights: list[dict]) -> None:
+    p = highlights_path(paper_id)
+    tmp = p.with_suffix(".tmp")
+    tmp.write_text(json.dumps(highlights, indent=2, ensure_ascii=False))
+    tmp.rename(p)

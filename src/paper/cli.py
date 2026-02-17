@@ -10,6 +10,8 @@ from paper.parser import parse_paper
 from paper.renderer import (
     render_full,
     render_header,
+    render_highlight_list,
+    render_highlight_matches,
     render_outline,
     render_search_results,
     render_section,
@@ -23,6 +25,13 @@ def _load(reference: str):
     """Fetch + parse a paper, returning the Document."""
     arxiv_id, pdf_path = fetch_paper(reference)
     return parse_paper(arxiv_id, pdf_path)
+
+
+def _load_with_paths(reference: str):
+    """Fetch + parse a paper, returning (Document, arxiv_id, pdf_path)."""
+    arxiv_id, pdf_path = fetch_paper(reference)
+    doc = parse_paper(arxiv_id, pdf_path)
+    return doc, arxiv_id, pdf_path
 
 
 def _find_section(doc, section_name: str):
@@ -181,3 +190,168 @@ def info(reference: str):
     console.print(f"  Sentences: {total_sentences}")
     console.print(f"  Characters: {len(doc.raw_text)}")
     console.print()
+
+
+# --- Highlight command group ---
+
+@cli.group()
+def highlight():
+    """Search, add, list, and remove highlights on a paper."""
+    pass
+
+
+@highlight.command("search")
+@click.argument("reference")
+@click.argument("query")
+@click.option("--context", "-c", default=2, help="Lines of context around matches.")
+def highlight_search(reference: str, query: str, context: int):
+    """Search for text in a paper's PDF.
+
+    REFERENCE: arxiv ID or URL (e.g., 2301.12345)
+    QUERY: text to search for
+    """
+    from paper.highlighter import search_pdf
+
+    try:
+        doc, arxiv_id, pdf = _load_with_paths(reference)
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise SystemExit(1)
+
+    matches = search_pdf(pdf, query)
+    render_highlight_matches(matches, query, doc)
+
+
+@highlight.command("add")
+@click.argument("reference")
+@click.argument("query")
+@click.option("--color", type=click.Choice(["yellow", "green", "blue", "pink"]), default="yellow", help="Highlight color.")
+@click.option("--note", default="", help="Note to attach to the highlight.")
+@click.option("--return-json", "return_json", is_flag=True, default=False, help="Output app-compatible JSON.")
+def highlight_add(reference: str, query: str, color: str, note: str, return_json: bool):
+    """Find text and add a highlight.
+
+    REFERENCE: arxiv ID or URL (e.g., 2301.12345)
+    QUERY: text to highlight
+    """
+    import json as json_mod
+    import sys
+    from paper.highlighter import add_highlight, annotate_pdf, match_to_json, search_pdf
+    from paper import storage
+
+    try:
+        doc, arxiv_id, pdf = _load_with_paths(reference)
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise SystemExit(1)
+
+    matches = search_pdf(pdf, query)
+
+    if not matches:
+        console.print(f"[red]No matches found for \"{query}\"[/red]")
+        raise SystemExit(1)
+
+    # Select match
+    if len(matches) == 1:
+        selected = matches[0]
+    else:
+        console.print(f"  [bold]{len(matches)} matches found:[/bold]")
+        console.print()
+        for i, m in enumerate(matches, 1):
+            context = m.get("context", "")
+            if len(context) > 100:
+                context = context[:97] + "..."
+            console.print(f"  [bold yellow]{i}.[/bold yellow] page {m['page'] + 1}: {context}")
+        console.print()
+
+        if not sys.stdin.isatty():
+            selected = matches[0]
+        else:
+            try:
+                choice = click.prompt("Pick a match", type=int, default=1)
+                if 1 <= choice <= len(matches):
+                    selected = matches[choice - 1]
+                else:
+                    selected = matches[0]
+            except (EOFError, click.Abort):
+                selected = matches[0]
+
+    if return_json:
+        result = match_to_json(selected, doc)
+        result["color"] = color
+        if note:
+            result["note"] = note
+        console.print(json_mod.dumps(result, indent=2))
+        return
+
+    # Persist highlight
+    hl = add_highlight(
+        paper_id=arxiv_id,
+        text=query,
+        page=selected["page"],
+        rects=selected["rects"],
+        color=color,
+        note=note,
+    )
+
+    # Annotate PDF
+    annotated = storage.annotated_pdf_path(arxiv_id)
+    all_highlights = storage.load_highlights(arxiv_id)
+    annotate_pdf(pdf, annotated, all_highlights)
+
+    console.print(f"  [bold green]Highlight #{hl.id} added[/bold green] on page {selected['page'] + 1}")
+    if note:
+        console.print(f"  [dim]Note: {note}[/dim]")
+    console.print(f"  [dim]Annotated PDF: {annotated}[/dim]")
+    console.print()
+
+
+@highlight.command("list")
+@click.argument("reference")
+def highlight_list(reference: str):
+    """List highlights for a paper.
+
+    REFERENCE: arxiv ID or URL (e.g., 2301.12345)
+    """
+    from paper import storage
+
+    try:
+        doc, arxiv_id, _ = _load_with_paths(reference)
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise SystemExit(1)
+
+    highlights = storage.load_highlights(arxiv_id)
+    render_highlight_list(highlights, doc)
+
+
+@highlight.command("remove")
+@click.argument("reference")
+@click.argument("highlight_id", type=int)
+def highlight_remove(reference: str, highlight_id: int):
+    """Remove a highlight by ID.
+
+    REFERENCE: arxiv ID or URL (e.g., 2301.12345)
+    HIGHLIGHT_ID: numeric ID of the highlight to remove
+    """
+    from paper.highlighter import annotate_pdf, remove_highlight
+    from paper import storage
+
+    try:
+        _, arxiv_id, pdf = _load_with_paths(reference)
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise SystemExit(1)
+
+    if remove_highlight(arxiv_id, highlight_id):
+        # Re-annotate PDF with remaining highlights
+        remaining = storage.load_highlights(arxiv_id)
+        annotated = storage.annotated_pdf_path(arxiv_id)
+        if remaining:
+            annotate_pdf(pdf, annotated, remaining)
+        elif annotated.exists():
+            annotated.unlink()
+        console.print(f"  [bold green]Highlight #{highlight_id} removed.[/bold green]")
+    else:
+        console.print(f"  [red]Highlight #{highlight_id} not found.[/red]")
+        raise SystemExit(1)

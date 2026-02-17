@@ -57,6 +57,18 @@ class Metadata:
 
 
 @dataclass
+class Highlight:
+    """A persisted highlight on a paper."""
+    id: int
+    text: str
+    page: int  # 0-indexed
+    rects: list[dict] = field(default_factory=list)  # [{x0, y0, x1, y1}]
+    color: str = "yellow"
+    note: str = ""
+    created_at: str = ""
+
+
+@dataclass
 class Document:
     """A parsed paper document."""
     metadata: Metadata = field(default_factory=Metadata)
