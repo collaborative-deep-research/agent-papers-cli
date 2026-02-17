@@ -145,3 +145,74 @@ class TestFontBasedParsing:
         registry = build_ref_registry(doc_13971)
         section_refs = [e for e in registry if e.kind == "section"]
         assert len(section_refs) == len(doc_13971.sections)
+
+    def test_no_numeric_table_data_as_headings(self, doc_13971: Document):
+        """Table values like '88.0' should not become section headings."""
+        for s in doc_13971.sections:
+            import re
+            if re.match(r"^[\d\s.,\-+%]+$", s.heading.strip()):
+                assert len(s.heading.strip()) <= 3, (
+                    f"Numeric table data detected as heading: {s.heading!r}"
+                )
+
+
+# ---------------------------------------------------------------------------
+# 2505.21451 — Font-based parsing with tricky formatting
+#
+# No PDF outline.  Tests robustness of heading detection against:
+# - Author names at heading font size (affiliation symbols ♣ ♢ ♠)
+# - Bold body text containing heading keywords ("experiments", "models")
+# - Title at large font with arXiv header at even larger font
+# - Multi-line wrapped headings requiring fragment merging
+# - Small-caps section titles (section 4: PERSONACONFLICTS CORPUS)
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="module")
+def doc_21451() -> Document:
+    doc = _load_if_cached("2505.21451")
+    if doc is None:
+        pytest.skip("Paper 2505.21451 not cached (run: uv run paper outline 2505.21451)")
+    return doc
+
+
+class TestTrickyFontBasedParsing:
+    """Tests for papers with tricky font-based heading detection."""
+
+    def test_no_author_names_as_sections(self, doc_21451: Document):
+        """Author names should not appear as section headings."""
+        headings = {s.heading for s in doc_21451.sections}
+        for name in ["Jocelyn Shen", "Akhila Yerukola", "Maarten Sap"]:
+            assert not any(name in h for h in headings), (
+                f"Author name {name!r} detected as heading"
+            )
+
+    def test_title_not_as_section(self, doc_21451: Document):
+        """Paper title should not appear in the section list."""
+        headings = [s.heading for s in doc_21451.sections]
+        assert headings[0] != "Words Like Knives :", (
+            "Paper title detected as first section heading"
+        )
+
+    def test_no_body_text_as_sections(self, doc_21451: Document):
+        """Sentence fragments should not be section headings."""
+        for s in doc_21451.sections:
+            assert not s.heading.endswith("-"), (
+                f"Hyphenated word break as heading: {s.heading!r}"
+            )
+            assert not s.heading[0].islower(), (
+                f"Lowercase-starting text as heading: {s.heading!r}"
+            )
+
+    def test_merged_headings(self, doc_21451: Document):
+        """Multi-line headings should be merged."""
+        headings = {s.heading for s in doc_21451.sections}
+        assert "3 Non-Violent Communication Framework" in headings
+        assert "7 LLMs for Detecting Conversational Breakdowns" in headings
+
+    def test_sections_have_content(self, doc_21451: Document):
+        sections_with_content = [s for s in doc_21451.sections if s.content]
+        assert len(sections_with_content) >= 15
+
+    def test_has_citations(self, doc_21451: Document):
+        citations = [lk for lk in doc_21451.links if lk.kind == "citation"]
+        assert len(citations) > 0
