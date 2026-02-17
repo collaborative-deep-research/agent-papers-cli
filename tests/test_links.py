@@ -4,7 +4,10 @@ import pytest
 
 from paper.models import Document, Link, Metadata, Section, Sentence, Span
 from paper.parser import _detect_citations
-from paper.renderer import RefEntry, build_ref_registry, render_goto
+from paper.renderer import (
+    RefEntry, build_ref_registry, render_goto,
+    annotate_text, _find_cite_end_in_text,
+)
 
 
 class TestDetectCitations:
@@ -207,6 +210,105 @@ class TestRenderGoto:
         doc = self._make_doc()
         result = render_goto(doc, "z99")
         assert result is False
+
+
+class TestInlineCitationPlacement:
+    """Test that [ref=cN] tags are placed right after the citation, not at end."""
+
+    def test_find_cite_end_author_year(self):
+        """surname + year found → position after year and closing paren."""
+        link = Link(kind="citation", text="(Kingma & Ba, 2015)", url="",
+                    target_page=-1, page=0, span=Span(start=0, end=0))
+        text = "Adam ( Kingma & Ba , 2015 ), which maintains"
+        pos = _find_cite_end_in_text(text, link)
+        assert pos is not None
+        # Should be right after "2015 )" — the closing paren
+        assert text[:pos].rstrip().endswith(")")
+
+    def test_find_cite_end_year_only_fallback(self):
+        """Surname not in text, year appears once → use year position."""
+        link = Link(kind="citation", text="(Houlsby et al., 2019;", url="",
+                    target_page=-1, page=0, span=Span(start=0, end=0))
+        text = ", 2019 ; Li & Liang , 2021 ; Hu et al."
+        pos = _find_cite_end_in_text(text, link)
+        assert pos is not None
+        # Should be right after "2019" (before the semicolon)
+        assert "2019" in text[:pos]
+        assert pos < len(text)  # not at end
+
+    def test_find_cite_end_word_boundary(self):
+        """'Hu' should NOT match 'Huh'."""
+        link = Link(kind="citation", text="(Hu et al., 2022)", url="",
+                    target_page=-1, page=0, span=Span(start=0, end=0))
+        text = "the-Explorer (LTE; Huh et al. , 2024 ), and Flora"
+        pos = _find_cite_end_in_text(text, link)
+        # "Hu" should not match "Huh" — no valid position
+        assert pos is None
+
+    def test_find_cite_end_no_false_year_match(self):
+        """When surname IS in text but year is for a different citation, skip."""
+        link = Link(kind="citation", text="(Hao et al., 2024)", url="",
+                    target_page=-1, page=0, span=Span(start=0, end=0))
+        text = "Huh et al. , 2024 ), and Flora ( Hao et al."
+        pos = _find_cite_end_in_text(text, link)
+        # "Hao" is found but "2024" in the window is Huh's year, not Hao's
+        # Hao's year is beyond the text → should not place
+        assert pos is None
+
+    def test_annotate_inline_placement(self):
+        """Ref tag should appear right after the citation, not at sentence end."""
+        doc = Document(
+            metadata=Metadata(title="Test", arxiv_id="test"),
+            sections=[Section(heading="Intro", level=1, content="x",
+                             spans=[Span(start=0, end=100)])],
+            raw_text="Adam ( Kingma & Ba , 2015 ), which maintains estimates.",
+            links=[Link(kind="citation", text="(Kingma & Ba, 2015)", url="",
+                       target_page=-1, page=0, span=Span(start=0, end=50))],
+        )
+        registry = build_ref_registry(doc)
+        text = "Adam ( Kingma & Ba , 2015 ), which maintains estimates."
+        result = annotate_text(text, doc, registry, span_start=0, span_end=55)
+        # [ref=c1] should appear BEFORE "which", not at end
+        ref_pos = result.find("[ref=c1]")
+        which_pos = result.find("which")
+        assert ref_pos < which_pos
+
+    def test_annotate_dedup_across_sentences(self):
+        """Same citation shouldn't be annotated twice across sentence fragments."""
+        doc = Document(
+            metadata=Metadata(title="Test", arxiv_id="test"),
+            sections=[Section(heading="Intro", level=1, content="x",
+                             spans=[Span(start=0, end=100)])],
+            raw_text="( Houlsby et al.\n, 2019 )",
+            links=[Link(kind="citation", text="(Houlsby et al., 2019;", url="",
+                       target_page=-1, page=0, span=Span(start=0, end=24))],
+        )
+        registry = build_ref_registry(doc)
+        seen = set()
+        # Sentence 1: has surname but not year
+        annotate_text("( Houlsby et al.", doc, registry,
+                      span_start=0, span_end=16, seen_refs=seen)
+        # Sentence 2: has year — should place ref here
+        result = annotate_text(", 2019 )", doc, registry,
+                               span_start=17, span_end=24, seen_refs=seen)
+        assert "[ref=c1]" in result
+
+    def test_numeric_citation_inline(self):
+        """Numeric citations [1] should be annotated right after the bracket."""
+        doc = Document(
+            metadata=Metadata(title="Test", arxiv_id="test"),
+            sections=[Section(heading="Intro", level=1, content="x",
+                             spans=[Span(start=0, end=50)])],
+            raw_text="As shown in [1], the method works well for all cases.",
+            links=[Link(kind="citation", text="[1]", url="",
+                       target_page=-1, page=0, span=Span(start=12, end=15))],
+        )
+        registry = build_ref_registry(doc)
+        text = "As shown in [1], the method works well for all cases."
+        result = annotate_text(text, doc, registry, span_start=0, span_end=50)
+        ref_pos = result.find("[ref=c1]")
+        method_pos = result.find("the method")
+        assert ref_pos < method_pos
 
 
 class TestGotoCLI:

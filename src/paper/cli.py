@@ -17,7 +17,6 @@ from paper.renderer import (
     render_section,
     render_skim,
     _print_ref_footer,
-    _section_ref_map,
 )
 
 console = Console()
@@ -103,9 +102,8 @@ def read(reference: str, section: str | None, no_refs: bool):
         if matched:
             refs = not no_refs
             registry = build_ref_registry(doc) if refs else []
-            sec_refs = _section_ref_map(registry) if refs else {}
             render_header(doc)
-            render_section(matched, refs=refs, registry=registry, sec_refs=sec_refs, doc=doc)
+            render_section(matched, refs=refs, registry=registry, doc=doc)
             if refs and registry:
                 _print_ref_footer(registry, doc.metadata.arxiv_id)
         else:

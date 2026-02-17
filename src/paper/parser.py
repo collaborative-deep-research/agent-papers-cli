@@ -627,11 +627,19 @@ def _extract_links(
         anchor_text = re.sub(r",\s+", ", ", anchor_text)
         anchor_text = re.sub(r"\s+\)", ")", anchor_text)
 
+        # Use union of first and last fragment spans so cross-line
+        # citations (surname on one line, year on the next) are covered.
         _, first_span = _find_anchor(lines, pg, group_rects[0])
+        if len(group_rects) > 1:
+            _, last_span = _find_anchor(lines, pg, group_rects[-1])
+            link_span = Span(start=first_span.start, end=max(first_span.end, last_span.end))
+        else:
+            link_span = first_span
         is_citation = dest.startswith("cite.")
 
-        # Only keep the first occurrence per nameddest
-        if dest not in seen_named:
+        # Keep all citation occurrences (different spans for each location
+        # in the paper) but dedup non-citation named links.
+        if is_citation or dest not in seen_named:
             seen_named.add(dest)
             results.append(Link(
                 kind="citation" if is_citation else "internal",
@@ -639,7 +647,7 @@ def _extract_links(
                 url="",
                 target_page=tp,
                 page=pg,
-                span=first_span,
+                span=link_span,
                 target_xy=txy,
                 dest_name=dest,
             ))

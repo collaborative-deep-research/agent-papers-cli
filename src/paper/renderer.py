@@ -133,15 +133,75 @@ def _build_cite_span_index(doc: Document, registry: list[RefEntry]) -> list[tupl
     return spans
 
 
+def _find_cite_end_in_text(text: str, link: Link) -> int | None:
+    """Find the end position of a citation within sentence text.
+
+    Searches by author surname + year, falling back to year-only
+    or bracket pattern for numeric citations.
+    """
+    author = re.match(r"\(?\s*([A-Z][a-z]+)", link.text)
+    year_m = re.search(r"\d{4}", link.text)
+    surname = author.group(1) if author else None
+    year = year_m.group(0) if year_m else None
+
+    def _skip_close(pos: int) -> int:
+        """Advance past trailing whitespace and closing paren/bracket."""
+        while pos < len(text) and text[pos] in " \t":
+            pos += 1
+        if pos < len(text) and text[pos] in ")]":
+            pos += 1
+        return pos
+
+    # Strategy 1: surname + year (most precise)
+    surname_found = False
+    if surname and year:
+        pos = 0
+        while pos < len(text):
+            name_idx = text.find(surname, pos)
+            if name_idx == -1:
+                break
+            # Word boundary check — avoid "Hu" matching "Huh", etc.
+            if name_idx > 0 and text[name_idx - 1].isalpha():
+                pos = name_idx + 1
+                continue
+            end_of_name = name_idx + len(surname)
+            if end_of_name < len(text) and text[end_of_name].isalpha():
+                pos = name_idx + 1
+                continue
+            surname_found = True
+            window = text[name_idx : name_idx + 150]
+            yr_idx = window.find(year)
+            if yr_idx >= 0:
+                return _skip_close(name_idx + yr_idx + len(year))
+            pos = name_idx + 1
+
+    # Strategy 2: year only — when surname wasn't found in text (cross-line
+    # citations) or doesn't exist.  Skipped when surname WAS found to avoid
+    # placing "Hao, 2024" at "Huh, 2024" when only one year in text.
+    if year and not surname_found:
+        positions = [m.start() for m in re.finditer(re.escape(year), text)]
+        if len(positions) == 1:
+            return _skip_close(positions[0] + len(year))
+
+    # Strategy 3: numeric citation bracket pattern
+    if link.text.startswith("[") and link.text.endswith("]"):
+        idx = text.find(link.text)
+        if idx >= 0:
+            return idx + len(link.text)
+
+    return None
+
+
 def annotate_text(
     text: str, doc: Document, registry: list[RefEntry],
     span_start: int = -1, span_end: int = -1,
+    seen_refs: set[str] | None = None,
 ) -> str:
-    """Append [ref=...] tags for citations that overlap with this text span.
+    """Insert [ref=...] tags inline at citation positions.
 
-    Uses character-offset overlap when span_start/span_end are provided
-    (reliable — immune to whitespace differences between PDF text and
-    sentence text).  Falls back to regex text matching otherwise.
+    Uses character-offset overlap to find which citations are in this text,
+    then searches the text for each citation to place the ref tag right
+    after it (rather than appending at end).
     """
     if not registry:
         return text
@@ -149,31 +209,68 @@ def annotate_text(
     cite_spans = _build_cite_span_index(doc, registry)
 
     if span_start >= 0 and span_end >= 0:
-        # Span-based: find citations whose span overlaps [span_start, span_end)
-        found: list[str] = []
-        seen: set[str] = set()
+        # Find overlapping citations (skip already-seen refs)
+        overlapping: list[tuple[int, int, str]] = []
         for cs, ce, ref_id in cite_spans:
             if cs >= span_end:
                 break
-            if ce > span_start and ref_id not in seen:
-                found.append(ref_id)
-                seen.add(ref_id)
-        if found:
-            tags = "".join(f"\\[ref={r}]" for r in found)
-            return f"{text} [dim]{tags}[/dim]"
-        return text
+            if ce > span_start:
+                if seen_refs is None or ref_id not in seen_refs:
+                    overlapping.append((cs, ce, ref_id))
+
+        if not overlapping:
+            return text
+
+        # Build ref_id -> Link lookup
+        label_to_ref = {e.label: e.ref_id for e in registry if e.kind == "citation"}
+        ref_to_link: dict[str, Link] = {}
+        for link in doc.links:
+            if link.kind == "citation" and link.text in label_to_ref:
+                rid = label_to_ref[link.text]
+                if rid not in ref_to_link:
+                    ref_to_link[rid] = link
+
+        # Find inline insertion positions — only place refs we can locate;
+        # skip unfound refs so the next sentence can claim them.
+        insertions: list[tuple[int, str]] = []  # (position, ref_id)
+
+        for _, _, ref_id in overlapping:
+            link = ref_to_link.get(ref_id)
+            pos = _find_cite_end_in_text(text, link) if link else None
+            if pos is not None:
+                insertions.append((pos, ref_id))
+                if seen_refs is not None:
+                    seen_refs.add(ref_id)
+
+        if not insertions:
+            return text
+
+        # Sort rightmost first for safe insertion (avoids offset shifting)
+        insertions.sort(key=lambda x: -x[0])
+
+        result = text
+        for pos, ref_id in insertions:
+            tag = f" [dim]\\[ref={ref_id}][/dim]"
+            result = result[:pos] + tag + result[pos:]
+
+        return result
 
     # Fallback: text-based matching for raw content lines without spans
-    label_to_ref: dict[str, str] = {}
+    label_to_ref_fb: dict[str, str] = {}
     for entry in registry:
         if entry.kind == "citation":
-            label_to_ref[entry.label] = entry.ref_id
+            if seen_refs is None or entry.ref_id not in seen_refs:
+                label_to_ref_fb[entry.label] = entry.ref_id
 
     annotated = text
-    for marker, ref_id in label_to_ref.items():
-        tag = f"\\[ref={ref_id}]"
+    for marker, ref_id in label_to_ref_fb.items():
+        tag = f" [dim]\\[ref={ref_id}][/dim]"
         escaped_marker = re.escape(marker)
-        annotated = re.sub(escaped_marker, lambda m: f"{m.group(0)}{tag}", annotated, count=1)
+        match = re.search(escaped_marker, annotated)
+        if match:
+            annotated = annotated[:match.end()] + tag + annotated[match.end():]
+            if seen_refs is not None:
+                seen_refs.add(ref_id)
 
     return annotated
 
@@ -235,22 +332,26 @@ def render_outline(doc: Document, refs: bool = True) -> None:
 
 def render_section(section: Section, show_heading: bool = True, refs: bool = True,
                    registry: list[RefEntry] | None = None,
-                   sec_refs: dict[str, str] | None = None,
                    doc: Document | None = None) -> None:
-    """Print a single section's content."""
+    """Print a single section's content.
+
+    Refs annotate inline citations/links (navigation targets), not the
+    section heading itself — the heading is where you already are.
+    """
     if show_heading:
         indent = "  " * (section.level - 1)
         heading_label = f"{indent}[bold cyan]{section.heading}[/bold cyan]"
-        if refs and sec_refs and section.heading in sec_refs:
-            heading_label += f" {_ref_tag(sec_refs[section.heading])}"
         console.print(heading_label)
         console.print()
+
+    seen_refs: set[str] = set()
 
     for sentence in section.sentences:
         text = sentence.text
         if refs and doc and registry:
             text = annotate_text(text, doc, registry,
-                                 span_start=sentence.span.start, span_end=sentence.span.end)
+                                 span_start=sentence.span.start, span_end=sentence.span.end,
+                                 seen_refs=seen_refs)
         console.print(f"  {text}")
 
     if not section.sentences and section.content:
@@ -259,7 +360,7 @@ def render_section(section: Section, show_heading: bool = True, refs: bool = Tru
             if line.strip():
                 text = line.strip()
                 if refs and doc and registry:
-                    text = annotate_text(text, doc, registry)
+                    text = annotate_text(text, doc, registry, seen_refs=seen_refs)
                 console.print(f"  {text}")
 
     console.print()
@@ -270,10 +371,9 @@ def render_full(doc: Document, refs: bool = True) -> None:
     render_header(doc)
 
     registry = build_ref_registry(doc) if refs else []
-    sec_refs = _section_ref_map(registry) if refs else {}
 
     for section in doc.sections:
-        render_section(section, refs=refs, registry=registry, sec_refs=sec_refs, doc=doc)
+        render_section(section, refs=refs, registry=registry, doc=doc)
 
     if refs and registry:
         _print_ref_footer(registry, doc.metadata.arxiv_id)
@@ -298,12 +398,14 @@ def render_skim(doc: Document, num_lines: int = 2, max_level: int | None = None,
         console.print(heading_label)
 
         sentences = section.sentences[:num_lines]
+        seen_refs: set[str] = set()
         if sentences:
             for sent in sentences:
                 text = sent.text
                 if refs and registry:
                     text = annotate_text(text, doc, registry,
-                                         span_start=sent.span.start, span_end=sent.span.end)
+                                         span_start=sent.span.start, span_end=sent.span.end,
+                                         seen_refs=seen_refs)
                 console.print(f"{indent}  [dim]{text}[/dim]")
         elif section.content:
             # Fall back to first lines of raw content
@@ -311,7 +413,7 @@ def render_skim(doc: Document, num_lines: int = 2, max_level: int | None = None,
             for line in lines[:num_lines]:
                 text = line
                 if refs and registry:
-                    text = annotate_text(text, doc, registry)
+                    text = annotate_text(text, doc, registry, seen_refs=seen_refs)
                 console.print(f"{indent}  [dim]{text}[/dim]")
 
         console.print()
@@ -526,7 +628,6 @@ def _extract_ref_from_pdf(pdf_path, cite_link: Link) -> str | None:
 def render_goto(doc: Document, ref_id: str) -> bool:
     """Jump to a reference. Returns True if found, False otherwise."""
     registry = build_ref_registry(doc)
-    sec_refs = _section_ref_map(registry)
 
     # Find the entry
     entry = None
@@ -549,27 +650,27 @@ def render_goto(doc: Document, ref_id: str) -> bool:
             if section.heading == entry.target:
                 render_header(doc)
 
-                # Print heading
+                # Print heading (no section ref — you're already navigating here)
                 indent = "  " * (section.level - 1)
                 heading_label = f"{indent}[bold cyan]{section.heading}[/bold cyan]"
-                if section.heading in sec_refs:
-                    heading_label += f" {_ref_tag(sec_refs[section.heading])}"
                 console.print(heading_label)
                 console.print()
 
-                # Print up to max_sentences
+                # Print up to max_sentences with inline citation refs
                 total = len(section.sentences)
                 shown = section.sentences[:max_sentences]
+                seen_refs: set[str] = set()
                 for sent in shown:
                     text = annotate_text(sent.text, doc, registry,
-                                         span_start=sent.span.start, span_end=sent.span.end)
+                                         span_start=sent.span.start, span_end=sent.span.end,
+                                         seen_refs=seen_refs)
                     console.print(f"  {text}")
 
                 if not shown and section.content:
                     lines = [l.strip() for l in section.content.split("\n") if l.strip()]
                     total = len(lines)
                     for line in lines[:max_sentences]:
-                        text = annotate_text(line, doc, registry)
+                        text = annotate_text(line, doc, registry, seen_refs=seen_refs)
                         console.print(f"  {text}")
 
                 console.print()
