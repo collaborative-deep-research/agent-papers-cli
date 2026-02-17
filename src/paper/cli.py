@@ -222,20 +222,29 @@ def highlight_search(reference: str, query: str, context: int):
     render_highlight_matches(matches, query, doc)
 
 
+MAX_MATCHES_SHOWN = 20
+
+
 @highlight.command("add")
 @click.argument("reference")
 @click.argument("query")
 @click.option("--color", type=click.Choice(["yellow", "green", "blue", "pink"]), default="yellow", help="Highlight color.")
 @click.option("--note", default="", help="Note to attach to the highlight.")
 @click.option("--return-json", "return_json", is_flag=True, default=False, help="Output app-compatible JSON.")
-def highlight_add(reference: str, query: str, color: str, note: str, return_json: bool):
+@click.option("--pick", type=int, default=None, help="Select match N directly (1-indexed). Use with highlight search to find the right index.")
+@click.option("--interactive", "-i", is_flag=True, default=False, help="Interactively pick a match when multiple are found.")
+@click.option("--max-matches", type=int, default=MAX_MATCHES_SHOWN, help=f"Max matches to display (default: {MAX_MATCHES_SHOWN}).")
+def highlight_add(reference: str, query: str, color: str, note: str, return_json: bool, pick: int | None, interactive: bool, max_matches: int):
     """Find text and add a highlight.
 
     REFERENCE: arxiv ID or URL (e.g., 2301.12345)
     QUERY: text to highlight
+
+    With multiple matches, shows candidates and exits. Use --pick N to select
+    one, or --interactive for a prompt. Designed for non-interactive/agent use
+    by default.
     """
     import json as json_mod
-    import sys
     from paper.highlighter import add_highlight, annotate_pdf, match_to_json, search_pdf
     from paper import storage
 
@@ -254,27 +263,49 @@ def highlight_add(reference: str, query: str, color: str, note: str, return_json
     # Select match
     if len(matches) == 1:
         selected = matches[0]
-    else:
+    elif pick is not None:
+        if pick < 1 or pick > len(matches):
+            console.print(f"[red]--pick {pick} is out of range (1-{len(matches)})[/red]")
+            raise SystemExit(1)
+        selected = matches[pick - 1]
+    elif interactive:
         console.print(f"  [bold]{len(matches)} matches found:[/bold]")
         console.print()
-        for i, m in enumerate(matches, 1):
+        display_count = min(len(matches), max_matches)
+        for i, m in enumerate(matches[:display_count], 1):
             context = m.get("context", "")
             if len(context) > 100:
                 context = context[:97] + "..."
             console.print(f"  [bold yellow]{i}.[/bold yellow] page {m['page'] + 1}: {context}")
+        if len(matches) > display_count:
+            console.print(f"  [dim]... and {len(matches) - display_count} more (use --max-matches to see more)[/dim]")
         console.print()
 
-        if not sys.stdin.isatty():
-            selected = matches[0]
-        else:
-            try:
-                choice = click.prompt("Pick a match", type=int, default=1)
-                if 1 <= choice <= len(matches):
-                    selected = matches[choice - 1]
-                else:
-                    selected = matches[0]
-            except (EOFError, click.Abort):
-                selected = matches[0]
+        try:
+            choice = click.prompt("Pick a match", type=int, default=1)
+            if 1 <= choice <= len(matches):
+                selected = matches[choice - 1]
+            else:
+                console.print(f"[red]Choice {choice} is out of range (1-{len(matches)})[/red]")
+                raise SystemExit(1)
+        except (EOFError, click.Abort):
+            raise SystemExit(1)
+    else:
+        # Default: non-interactive — list matches and exit
+        console.print(f"  [bold]{len(matches)} matches found.[/bold] Use [cyan]--pick N[/cyan] to select one:")
+        console.print()
+        display_count = min(len(matches), max_matches)
+        for i, m in enumerate(matches[:display_count], 1):
+            context = m.get("context", "")
+            if len(context) > 100:
+                context = context[:97] + "..."
+            console.print(f"  [bold yellow]{i}.[/bold yellow] page {m['page'] + 1}: {context}")
+        if len(matches) > display_count:
+            console.print(f"  [dim]... and {len(matches) - display_count} more (use --max-matches to see all)[/dim]")
+        console.print()
+        console.print(f"  [dim]Example: paper highlight add {reference} \"{query}\" --pick 1[/dim]")
+        console.print(f"  [dim]Or use --interactive for a prompt.[/dim]")
+        raise SystemExit(0)
 
     if return_json:
         result = match_to_json(selected, doc)
