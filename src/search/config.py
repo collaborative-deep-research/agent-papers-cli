@@ -1,7 +1,12 @@
 """Environment variable configuration for search backends.
 
-API keys are loaded from environment variables or a .env file.
+API keys are loaded in priority order:
+  1. Shell environment variables (highest priority)
+  2. .env file in current directory
+  3. ~/.papers/.env (persistent config, set via `search env set`)
+
 Run `search env` to see which keys are configured.
+Run `search env set KEY value` to save a key persistently.
 
 Required keys per command:
     search google web/scholar  ->  SERPER_API_KEY
@@ -18,13 +23,47 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Load .env from current directory or parents
+# Persistent config location (shared with paper CLI)
+PAPERS_DIR = Path.home() / ".papers"
+PERSISTENT_ENV = PAPERS_DIR / ".env"
+
+# Load in reverse priority order (later loads don't overwrite existing)
+# 1. ~/.papers/.env (lowest priority — persistent defaults)
+if PERSISTENT_ENV.exists():
+    load_dotenv(PERSISTENT_ENV)
+
+# 2. .env in current directory (mid priority)
 load_dotenv()
 
-# Also try loading from ~/.env as a fallback for global keys
-_home_env = Path.home() / ".env"
-if _home_env.exists():
-    load_dotenv(_home_env)
+# 3. Shell env vars already set (highest priority — dotenv won't overwrite)
+
+
+# --- Persistent config ---
+
+def save_key(name: str, value: str) -> Path:
+    """Save an API key to ~/.papers/.env for persistent use."""
+    PAPERS_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Read existing entries
+    lines: list[str] = []
+    replaced = False
+    if PERSISTENT_ENV.exists():
+        for line in PERSISTENT_ENV.read_text().splitlines():
+            if line.startswith(f"{name}="):
+                lines.append(f"{name}={value}")
+                replaced = True
+            else:
+                lines.append(line)
+
+    if not replaced:
+        lines.append(f"{name}={value}")
+
+    PERSISTENT_ENV.write_text("\n".join(lines) + "\n")
+
+    # Also set in current process
+    os.environ[name] = value
+
+    return PERSISTENT_ENV
 
 
 # --- API key accessors ---
@@ -34,7 +73,7 @@ def get_serper_key() -> str:
     if not key:
         raise ValueError(
             "SERPER_API_KEY is not set. "
-            "Export it or add it to a .env file in the current directory."
+            "Run `search env set SERPER_API_KEY <your-key>` to configure it."
         )
     return key
 
@@ -49,12 +88,14 @@ def get_jina_key() -> str:
     if not key:
         raise ValueError(
             "JINA_API_KEY is not set. "
-            "Export it or add it to a .env file in the current directory."
+            "Run `search env set JINA_API_KEY <your-key>` to configure it."
         )
     return key
 
 
 # --- Status check ---
+
+VALID_KEYS = {"SERPER_API_KEY", "S2_API_KEY", "JINA_API_KEY"}
 
 ENV_VARS = {
     "SERPER_API_KEY": {

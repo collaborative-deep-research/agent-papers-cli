@@ -23,10 +23,18 @@ def cli():
 # ---------------------------------------------------------------------------
 
 
-@cli.command()
-def env():
-    """Show which API keys are configured."""
-    from search.config import check_env
+@cli.group(invoke_without_command=True)
+@click.pass_context
+def env(ctx):
+    """Show or configure API keys.
+
+    Run without arguments to see current status.
+    Use `search env set KEY value` to save a key to ~/.papers/.env.
+    """
+    if ctx.invoked_subcommand is not None:
+        return
+
+    from search.config import PERSISTENT_ENV, check_env
 
     statuses = check_env()
     console.print("API Key Status:")
@@ -38,11 +46,34 @@ def env():
         console.print(f"    Used by: {', '.join(info['required_by'])}", style="dim")
         console.print()
 
+    console.print(f"Config file: {PERSISTENT_ENV}", style="dim")
+
     if not all(is_set for _, is_set, _ in statuses):
         console.print(
-            "Tip: Add missing keys to a .env file in the current directory or export them.",
+            "Tip: Run `search env set KEY value` to save a key persistently.",
             style="dim",
         )
+
+
+@env.command("set")
+@click.argument("key")
+@click.argument("value")
+def env_set(key: str, value: str):
+    """Save an API key to ~/.papers/.env.
+
+    KEY: one of SERPER_API_KEY, S2_API_KEY, JINA_API_KEY
+    VALUE: your API key value
+    """
+    from search.config import VALID_KEYS, save_key
+
+    key = key.upper()
+    if key not in VALID_KEYS:
+        console.print(f"[red]Unknown key: {key}[/red]")
+        console.print(f"Valid keys: {', '.join(sorted(VALID_KEYS))}")
+        raise SystemExit(1)
+
+    path = save_key(key, value)
+    console.print(f"Saved {key} to {path}")
 
 
 # ---------------------------------------------------------------------------

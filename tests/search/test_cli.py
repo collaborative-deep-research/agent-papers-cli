@@ -21,12 +21,36 @@ class TestSearchCLI:
         result = runner.invoke(cli, ["env", "--help"])
         assert result.exit_code == 0
 
-    def test_env_runs(self, runner):
+    def test_env_shows_status(self, runner):
         result = runner.invoke(cli, ["env"])
         assert result.exit_code == 0
         assert "SERPER_API_KEY" in result.output
         assert "S2_API_KEY" in result.output
         assert "JINA_API_KEY" in result.output
+
+    def test_env_set_help(self, runner):
+        result = runner.invoke(cli, ["env", "set", "--help"])
+        assert result.exit_code == 0
+        assert "KEY" in result.output
+        assert "VALUE" in result.output
+
+    def test_env_set_invalid_key(self, runner):
+        result = runner.invoke(cli, ["env", "set", "INVALID_KEY", "value"])
+        assert result.exit_code == 1
+        assert "Unknown key" in result.output
+
+    def test_env_set_saves_key(self, runner, tmp_path, monkeypatch):
+        # Redirect PAPERS_DIR to tmp
+        import search.config as config
+        monkeypatch.setattr(config, "PAPERS_DIR", tmp_path)
+        monkeypatch.setattr(config, "PERSISTENT_ENV", tmp_path / ".env")
+
+        result = runner.invoke(cli, ["env", "set", "SERPER_API_KEY", "test-123"])
+        assert result.exit_code == 0
+        assert "Saved" in result.output
+
+        env_content = (tmp_path / ".env").read_text()
+        assert "SERPER_API_KEY=test-123" in env_content
 
 
 class TestGoogleCLI:

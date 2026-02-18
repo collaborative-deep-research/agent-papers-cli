@@ -2,7 +2,7 @@
 
 import os
 
-from search.config import check_env, get_jina_key, get_s2_key, get_serper_key
+from search.config import check_env, get_jina_key, get_s2_key, get_serper_key, save_key
 
 import pytest
 
@@ -58,3 +58,49 @@ class TestGetJinaKey:
         monkeypatch.delenv("JINA_API_KEY", raising=False)
         with pytest.raises(ValueError, match="JINA_API_KEY"):
             get_jina_key()
+
+
+class TestSaveKey:
+    def test_save_new_key(self, tmp_path, monkeypatch):
+        import search.config as config
+        monkeypatch.setattr(config, "PAPERS_DIR", tmp_path)
+        monkeypatch.setattr(config, "PERSISTENT_ENV", tmp_path / ".env")
+
+        path = save_key("SERPER_API_KEY", "sk-123")
+        assert path == tmp_path / ".env"
+
+        content = path.read_text()
+        assert "SERPER_API_KEY=sk-123" in content
+
+    def test_update_existing_key(self, tmp_path, monkeypatch):
+        import search.config as config
+        monkeypatch.setattr(config, "PAPERS_DIR", tmp_path)
+        monkeypatch.setattr(config, "PERSISTENT_ENV", tmp_path / ".env")
+
+        save_key("SERPER_API_KEY", "old-value")
+        save_key("SERPER_API_KEY", "new-value")
+
+        content = (tmp_path / ".env").read_text()
+        assert "SERPER_API_KEY=new-value" in content
+        assert "old-value" not in content
+
+    def test_preserves_other_keys(self, tmp_path, monkeypatch):
+        import search.config as config
+        monkeypatch.setattr(config, "PAPERS_DIR", tmp_path)
+        monkeypatch.setattr(config, "PERSISTENT_ENV", tmp_path / ".env")
+
+        save_key("SERPER_API_KEY", "serper-val")
+        save_key("JINA_API_KEY", "jina-val")
+
+        content = (tmp_path / ".env").read_text()
+        assert "SERPER_API_KEY=serper-val" in content
+        assert "JINA_API_KEY=jina-val" in content
+
+    def test_sets_in_current_process(self, tmp_path, monkeypatch):
+        import search.config as config
+        monkeypatch.setattr(config, "PAPERS_DIR", tmp_path)
+        monkeypatch.setattr(config, "PERSISTENT_ENV", tmp_path / ".env")
+        monkeypatch.delenv("S2_API_KEY", raising=False)
+
+        save_key("S2_API_KEY", "s2-test")
+        assert os.environ.get("S2_API_KEY") == "s2-test"
