@@ -2,6 +2,8 @@
 
 ## Structure
 
+### paper tests (`tests/`)
+
 | File | What it tests |
 |---|---|
 | `test_models.py` | Data model serialization (Document save/load roundtrip, links) |
@@ -11,6 +13,16 @@
 | `test_fetcher.py` | ArXiv ID resolution from various URL formats |
 | `test_storage.py` | Cache directory management, JSON corruption recovery |
 | `test_integration.py` | End-to-end parsing of real papers (see below) |
+
+### search tests (`tests/search/`)
+
+| File | What it tests |
+|---|---|
+| `test_cli.py` | CLI help text, command registration, env set, missing key errors |
+| `test_backends.py` | Backend HTTP calls with mocked responses (Google, S2, PubMed, Jina, Serper) |
+| `test_config.py` | Env var detection, key accessors, persistent `save_key` to `~/.papers/.env` |
+| `test_models.py` | Dataclass defaults and field values |
+| `test_renderer.py` | Rich output formatting, reference IDs, suggestive prompts |
 
 ## Integration tests (`test_integration.py`)
 
