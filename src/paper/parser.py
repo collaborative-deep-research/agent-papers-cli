@@ -588,11 +588,15 @@ def _extract_metadata(
 
     pdf_meta = doc_fitz.metadata or {}
 
+    # Only generate arxiv URL if the ID looks like an arxiv ID
+    is_arxiv = bool(re.match(r"^\d{4}\.\d{4,5}(?:v\d+)?$", arxiv_id)) or "/" in arxiv_id
+    url = f"https://arxiv.org/abs/{arxiv_id}" if is_arxiv else ""
+
     return Metadata(
         title=title or pdf_meta.get("title", ""),
         authors=[a.strip() for a in pdf_meta.get("author", "").split(",") if a.strip()],
         arxiv_id=arxiv_id,
-        url=f"https://arxiv.org/abs/{arxiv_id}",
+        url=url,
     )
 
 

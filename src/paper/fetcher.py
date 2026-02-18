@@ -45,16 +45,22 @@ def abs_url_for_id(arxiv_id: str) -> str:
 
 
 def fetch_paper(reference: str) -> tuple[str, Path]:
-    """Fetch a paper PDF, returning (arxiv_id, pdf_path).
+    """Fetch a paper PDF, returning (paper_id, pdf_path).
 
-    Downloads if not already cached. Uses atomic write to prevent
-    corrupt files from interrupted downloads.
+    Accepts arxiv IDs/URLs or local PDF file paths.
+    Downloads from arxiv if not already cached.
     """
+    # Check if reference is a local PDF file
+    ref_path = Path(reference).expanduser()
+    if ref_path.suffix.lower() == ".pdf" and ref_path.is_file():
+        paper_id = ref_path.stem
+        return paper_id, ref_path.resolve()
+
     arxiv_id = resolve_arxiv_id(reference)
     if arxiv_id is None:
         raise ValueError(
-            f"Could not parse arxiv ID from: {reference}\n"
-            "Accepted formats: 2301.12345, arxiv.org/abs/2301.12345, arxiv.org/pdf/2301.12345"
+            f"Could not parse reference: {reference}\n"
+            "Accepted formats: 2301.12345, arxiv.org/abs/2301.12345, /path/to/paper.pdf"
         )
 
     if storage.has_pdf(arxiv_id):

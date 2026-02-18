@@ -30,9 +30,9 @@ paper highlight list <ref>             # List stored highlights
 paper highlight remove <ref> <id>      # Remove a highlight by ID
 ```
 
-`<ref>` accepts: `2302.13971`, `arxiv.org/abs/2302.13971`, `arxiv.org/pdf/2302.13971`
+`<ref>` accepts: `2302.13971`, `arxiv.org/abs/2302.13971`, `arxiv.org/pdf/2302.13971`, or a **local PDF path** like `./paper.pdf`
 
-Papers are downloaded once and cached in `~/.papers/`.
+Arxiv papers are downloaded once and cached in `~/.papers/`. Local PDFs are read directly from disk.
 
 ## `search` commands
 
@@ -208,7 +208,7 @@ src/search/                        # search CLI
 
 ### How it works
 
-1. **Fetch**: Downloads the PDF from arxiv and caches it in `~/.papers/<id>/`
+1. **Fetch**: Downloads the PDF from arxiv (and caches in `~/.papers/<id>/`) or reads a local PDF directly
 2. **Parse**: Extracts text with [PyMuPDF](https://pymupdf.readthedocs.io/), detects headings via PDF outline or font-size heuristics, splits sentences with [PySBD](https://github.com/nipunsadvilkar/pySBD), extracts links and citations
 3. **Display**: Renders structured output with [Rich](https://rich.readthedocs.io/), annotates with `[ref=...]` jump links
 
