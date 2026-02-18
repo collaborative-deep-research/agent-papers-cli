@@ -10,7 +10,7 @@ from rich.panel import Panel
 from rich.text import Text
 from rich.tree import Tree
 
-from paper.models import Document, Link, Section
+from paper.models import Document, Highlight, Link, Section
 from paper import storage
 
 console = Console()
@@ -494,6 +494,79 @@ def render_search_results(
         _print_ref_footer(registry, doc.metadata.arxiv_id)
 
     return match_count
+
+
+def render_highlight_matches(
+    matches: list[dict], query: str, doc: Document
+) -> None:
+    """Render highlight search matches with context."""
+    render_header(doc)
+    query_lower = query.lower()
+
+    if not matches:
+        console.print(f"  [dim]No matches found for \"{query}\"[/dim]")
+        console.print()
+        return
+
+    for i, match in enumerate(matches, 1):
+        page = match["page"]
+        context = match.get("context", "")
+
+        console.print(f"  [bold yellow]Match {i}[/bold yellow] on page {page + 1}")
+
+        # Highlight the query in context
+        highlighted = Text(context)
+        ctx_lower = context.lower()
+        search_pos = 0
+        while True:
+            hi = ctx_lower.find(query_lower, search_pos)
+            if hi == -1:
+                break
+            highlighted.stylize("bold red", hi, hi + len(query))
+            search_pos = hi + len(query)
+
+        console.print(Text("  "), highlighted)
+        console.print()
+
+    console.print(f"  [dim]{len(matches)} match(es) found[/dim]")
+    console.print()
+
+
+def render_highlight_list(highlights: list[dict], doc: Document) -> None:
+    """Render stored highlights for a paper."""
+    render_header(doc)
+
+    if not highlights:
+        console.print("  [dim]No highlights saved.[/dim]")
+        console.print()
+        return
+
+    COLOR_STYLES = {
+        "yellow": "bold yellow",
+        "green": "bold green",
+        "blue": "bold blue",
+        "pink": "bold magenta",
+    }
+
+    for hl in highlights:
+        color_style = COLOR_STYLES.get(hl.get("color", "yellow"), "bold yellow")
+        hl_id = hl["id"]
+        page = hl.get("page", 0)
+        text = hl.get("text", "")
+        note = hl.get("note", "")
+        color = hl.get("color", "yellow")
+
+        # Truncate long text
+        display_text = text if len(text) <= 80 else text[:77] + "..."
+
+        console.print(f"  [{color_style}]#{hl_id}[/{color_style}] [dim](p.{page + 1}, {color})[/dim]")
+        console.print(f"    {display_text}")
+        if note:
+            console.print(f"    [dim italic]Note: {note}[/dim italic]")
+        console.print()
+
+    console.print(f"  [dim]{len(highlights)} highlight(s)[/dim]")
+    console.print()
 
 
 def _resolve_citation_text(
