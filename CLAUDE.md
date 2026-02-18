@@ -7,7 +7,7 @@ A CLI tool for reading, skimming, and searching academic papers from the termina
 - **Entry point**: `paper = paper.cli:cli` (Click)
 - **Key modules**: `cli.py` (commands), `parser.py` (PDF parsing), `fetcher.py` (arxiv download), `storage.py` (cache), `renderer.py` (Rich output), `models.py` (data types)
 - **Cache**: `~/.papers/<arxiv_id>/` with `paper.pdf`, `parsed.json`, `metadata.json`
-- **Tests**: `pytest` (63 tests)
+- **Tests**: `pytest` (110 tests)
 
 ## Architecture notes
 

@@ -45,10 +45,11 @@ uv run pytest tests/test_integration.py -v
   handles this via substring matching, but the heading text in the section
   content may not get stripped cleanly. This is cosmetic.
 
-- **Citation detection is numeric-only**: Named citations like
-  `[Smith et al., 2023]` are not detected by the v1 regex. This is
-  intentional — numeric citations (`[1]`, `[2, 3]`, `[1-5]`) cover
-  the majority of ML papers.
+- **Citation detection**: Numeric citations (`[1]`, `[2, 3]`, `[1-5]`)
+  are detected via regex in `_detect_citations`. Author-year citations
+  like `(Kingma & Ba, 2015)` are detected from PDF link annotations
+  (`LINK_NAMED` with `cite.*` destinations), which covers most LaTeX
+  papers. Non-hyperlinked author-year citations are not detected.
 
 - **Small-caps section titles**: Some papers use small caps at a smaller
   font size for section titles (e.g., 2505.21451 section 4 "PERSONA

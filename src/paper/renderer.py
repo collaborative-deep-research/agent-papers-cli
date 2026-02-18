@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from pathlib import Path
 
 from rich.console import Console
 from rich.panel import Panel
@@ -611,7 +612,7 @@ def _resolve_citation_text(
     return None
 
 
-def _extract_ref_from_pdf(pdf_path, cite_link: Link) -> str | None:
+def _extract_ref_from_pdf(pdf_path: Path, cite_link: Link) -> str | None:
     """Open the PDF and extract reference text by searching the target page.
 
     LaTeX named destinations often have inaccurate y-coordinates, so

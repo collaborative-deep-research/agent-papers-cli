@@ -162,6 +162,7 @@ These papers cover different PDF structures and parsing paths:
 |-------|-----|---|-------|
 | LLaMA (Touvron et al.) | `2302.13971` | Font-size heuristic | No built-in ToC, standard two-column arxiv format |
 | Gradient ↔ Adapters (Torroba-Hennigen et al.) | `2502.13811` | PDF outline | 20 TOC entries, caught outline offset bug |
+| Words Like Knives (Shen et al.) | `2505.21451` | Font-size heuristic | Tricky formatting: author names at heading size, multi-line headings, small-caps |
 | Completion ≠ Collaboration (Shen et al.) | `2510.25744` | PDF outline | Proper hierarchy |
 | DeepSeek-R1 | `2501.12948` | PDF outline | Very long paper (86 pages), stress test |
 
@@ -189,7 +190,7 @@ paper outline 2302.13971 --no-refs  # clean output without refs
 - Heading detection is heuristic-based (font size + bold) — works well on standard arxiv but fragile on unusual templates
 - PDFs with a built-in outline/ToC get better results (read directly when available)
 - Section hierarchy (nesting) is approximate
-- Citation detection is numeric-only (`[1]`, `[2, 3]`, `[1-5]`) — named citations like `[Smith et al., 2023]` are not matched
+- Citation detection: numeric citations (`[1]`, `[2, 3]`, `[1-5]`) are detected via regex; author-year citations (`(Kingma & Ba, 2015)`) are detected when hyperlinked in the PDF (via `LINK_NAMED` destinations, common in LaTeX). Non-hyperlinked author-year citations are not detected.
 - When a TOC heading doesn't match any line on its page (e.g., TOC says "Proof of thm:foo" but PDF says "A.2. Proof of Thm. 1"), the section may include some extra content from the page header
 
 ## Future plans
@@ -197,6 +198,6 @@ paper outline 2302.13971 --no-refs  # clean output without refs
 - [GROBID](https://github.com/kermitt2/grobid) backend for ML-based section detection
 - `paper annotate` command for highlighting text in PDFs
 - Figure/table refs (`[ref=f...]`) — needs caption detection logic
-- Named citation detection (author-year style)
+- Named citation detection for non-hyperlinked author-year citations (hyperlinked ones already work via `LINK_NAMED`)
 - Richer document model inspired by [papermage](https://github.com/allenai/papermage)
 - Better handling of tables, figures, equations
