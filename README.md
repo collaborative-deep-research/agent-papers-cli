@@ -3,7 +3,7 @@
 CLI tools for reading academic papers and searching the web, academic literature, and biomedical databases from the terminal.
 
 - **`paper`** — read, skim, and search PDFs. Inspired by [agent-browser](https://github.com/vercel-labs/agent-browser) — but for PDFs.
-- **`search`** — search Google, Google Scholar, Semantic Scholar, PubMed, and extract webpage content.
+- **`search`** — search Google, Google Scholar, Semantic Scholar, PubMed, and extract webpage content. Based on the search APIs from [dr-tulu](https://github.com/rlresearch/dr-tulu).
 
 ## Install
 
