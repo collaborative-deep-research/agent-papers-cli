@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from typing import Optional
 
 import click
@@ -102,7 +101,7 @@ def google_web(query: str, num: int, gl: str, hl: str):
 
     try:
         results = search_web(query, num_results=num, gl=gl, hl=hl)
-        render_search_results(results, query=query, source="Google")
+        render_search_results(results, source="Google")
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
         raise SystemExit(1)
@@ -121,7 +120,7 @@ def google_scholar(query: str, num: int):
 
     try:
         results = search_scholar(query, num_results=num)
-        render_search_results(results, query=query, source="Google Scholar")
+        render_search_results(results, source="Google Scholar")
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
         raise SystemExit(1)
@@ -146,7 +145,6 @@ def semanticscholar():
 @click.option("--sort", default=None, help="Sort order (e.g., 'citationCount:desc').")
 @click.option("--limit", "-n", default=10, help="Number of results.")
 @click.option("--offset", default=0, help="Pagination offset.")
-@click.option("--json-params", "json_params", default=None, help="Raw JSON params to pass to the API.")
 def s2_papers(
     query: str,
     year: Optional[str],
@@ -155,7 +153,6 @@ def s2_papers(
     sort: Optional[str],
     limit: int,
     offset: int,
-    json_params: Optional[str],
 ):
     """Search for papers by keyword.
 
@@ -164,19 +161,12 @@ def s2_papers(
     from search.backends.semanticscholar import search_papers
     from search.renderer import render_search_results
 
-    kwargs = dict(year=year, min_citations=min_citations, venue=venue, sort=sort, limit=limit, offset=offset)
-
-    if json_params:
-        try:
-            extra = json.loads(json_params)
-            kwargs.update(extra)
-        except json.JSONDecodeError as e:
-            console.print(f"[red]Invalid JSON: {e}[/red]")
-            raise SystemExit(1)
-
     try:
-        results = search_papers(query, **kwargs)
-        render_search_results(results, query=query, source="Semantic Scholar")
+        results = search_papers(
+            query, year=year, min_citations=min_citations,
+            venue=venue, sort=sort, limit=limit, offset=offset,
+        )
+        render_search_results(results, source="Semantic Scholar")
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
         raise SystemExit(1)
@@ -204,7 +194,7 @@ def s2_snippets(
 
     try:
         results = search_snippets(query, year=year, paper_ids=paper_ids, venue=venue, limit=limit)
-        render_snippet_results(results, query=query)
+        render_snippet_results(results)
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
         raise SystemExit(1)
@@ -287,7 +277,7 @@ def pubmed(query: str, limit: int, offset: int):
 
     try:
         results = search_pubmed(query, limit=limit, offset=offset)
-        render_search_results(results, query=query, source="PubMed")
+        render_search_results(results, source="PubMed")
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
         raise SystemExit(1)

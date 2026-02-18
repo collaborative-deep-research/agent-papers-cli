@@ -18,7 +18,7 @@ def _detect_arxiv_id(url: str) -> str:
     return m.group(1) if m else ""
 
 
-def _suggestion_lines(result: SearchResult, ref: str) -> list[str]:
+def _suggestion_lines(result: SearchResult) -> list[str]:
     """Generate suggestive prompt lines for a search result."""
     lines = []
     arxiv_id = result.arxiv_id or _detect_arxiv_id(result.url)
@@ -33,7 +33,6 @@ def _suggestion_lines(result: SearchResult, ref: str) -> list[str]:
 def render_search_results(
     results: list[SearchResult],
     *,
-    query: str = "",
     source: str = "",
 ) -> None:
     """Render a list of search results with reference IDs."""
@@ -81,13 +80,13 @@ def render_search_results(
             console.print(f"     {snippet}")
 
         # Suggestive prompts
-        for line in _suggestion_lines(r, ref):
+        for line in _suggestion_lines(r):
             console.print(line, style="dim italic")
 
         console.print()
 
 
-def render_snippet_results(results: list[SnippetResult], *, query: str = "") -> None:
+def render_snippet_results(results: list[SnippetResult]) -> None:
     """Render snippet search results."""
     if not results:
         console.print("[yellow]No snippets found.[/yellow]")

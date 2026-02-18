@@ -27,13 +27,13 @@ from dotenv import load_dotenv
 PAPERS_DIR = Path.home() / ".papers"
 PERSISTENT_ENV = PAPERS_DIR / ".env"
 
-# Load in reverse priority order (later loads don't overwrite existing)
-# 1. ~/.papers/.env (lowest priority — persistent defaults)
+# Load in priority order (earlier loads win because dotenv doesn't overwrite existing)
+# 1. .env in current directory (mid priority)
+load_dotenv()
+
+# 2. ~/.papers/.env (lowest priority — persistent defaults)
 if PERSISTENT_ENV.exists():
     load_dotenv(PERSISTENT_ENV)
-
-# 2. .env in current directory (mid priority)
-load_dotenv()
 
 # 3. Shell env vars already set (highest priority — dotenv won't overwrite)
 
