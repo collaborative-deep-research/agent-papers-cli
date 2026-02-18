@@ -1,6 +1,9 @@
-# paper
+# paper & search
 
-A command-line tool for reading, skimming, and searching academic papers from the terminal. Inspired by [agent-browser](https://github.com/vercel-labs/agent-browser) — but for PDFs.
+CLI tools for reading academic papers and searching the web, academic literature, and biomedical databases from the terminal.
+
+- **`paper`** — read, skim, and search PDFs. Inspired by [agent-browser](https://github.com/vercel-labs/agent-browser) — but for PDFs.
+- **`search`** — search Google, Google Scholar, Semantic Scholar, PubMed, and extract webpage content. Based on the search APIs from [dr-tulu](https://github.com/rlresearch/dr-tulu).
 
 ## Install
 
@@ -10,7 +13,7 @@ uv pip install -e .
 
 Requires Python 3.10+.
 
-## Commands
+## `paper` commands
 
 ```bash
 paper outline <ref>                    # Show heading tree
@@ -24,6 +27,45 @@ paper goto <ref> <ref_id>              # Jump to a section, link, or citation
 `<ref>` accepts: `2302.13971`, `arxiv.org/abs/2302.13971`, `arxiv.org/pdf/2302.13971`
 
 Papers are downloaded once and cached in `~/.papers/`.
+
+## `search` commands
+
+```bash
+# Environment / API keys
+search env                             # Show API key status
+search env set KEY value               # Save a key to ~/.papers/.env
+
+# Google (requires SERPER_API_KEY)
+search google web "query"              # Web search
+search google scholar "query"          # Google Scholar search
+
+# Semantic Scholar (S2_API_KEY optional, recommended for rate limits)
+search semanticscholar papers "query"  # Paper search
+  [--year 2023-2025] [--min-citations 10] [--venue ACL] [--sort citationCount:desc] [--limit N]
+search semanticscholar snippets "query"  # Text snippet search
+  [--year 2024] [--paper-ids id1,id2]
+search semanticscholar citations <id>  # Papers citing this one
+search semanticscholar references <id> # Papers this one references
+search semanticscholar details <id>    # Full paper metadata
+
+# PubMed (no key needed)
+search pubmed "query" [--limit N] [--offset N]
+
+# Browse (requires JINA_API_KEY for jina backend)
+search browse <url> [--backend jina|serper] [--timeout 30]
+```
+
+### API keys
+
+Set API keys persistently with `search env set`:
+
+```bash
+search env set SERPER_API_KEY sk-...   # required for google, browse --backend serper
+search env set S2_API_KEY ...          # optional, higher Semantic Scholar rate limits
+search env set JINA_API_KEY ...        # required for browse --backend jina
+```
+
+Keys are saved to `~/.papers/.env` and loaded automatically. Shell environment variables take precedence. Run `search env` to check what's configured.
 
 ### Jump links
 
@@ -111,13 +153,24 @@ paper outline 2302.13971 --no-refs
 ## Architecture
 
 ```
-src/paper/
+src/paper/                         # paper CLI
 ├── cli.py        # Click CLI — all commands defined here
 ├── fetcher.py    # Downloads PDFs from arxiv, manages cache
 ├── parser.py     # PDF → Document: text extraction, heading detection, sentence splitting
 ├── models.py     # Data models: Document, Section, Sentence, Span, Box, Metadata, Link
 ├── renderer.py   # Rich terminal output, ref registry, goto rendering
 └── storage.py    # ~/.papers/ cache directory management
+
+src/search/                        # search CLI
+├── cli.py        # Click CLI — all commands and subgroups
+├── config.py     # API key loading (dotenv), persistent storage, env status
+├── models.py     # Data models: SearchResult, SnippetResult, CitationResult, BrowseResult
+├── renderer.py   # Rich terminal output with reference IDs and suggestive prompts
+└── backends/
+    ├── google.py           # Serper API (web + scholar)
+    ├── semanticscholar.py  # S2 API (papers, snippets, citations, references, details)
+    ├── pubmed.py           # NCBI E-utilities (esearch + efetch)
+    └── browse.py           # Webpage content extraction (Jina Reader, Serper scrape)
 ```
 
 ### How it works
@@ -184,6 +237,22 @@ paper outline 2302.13971 --no-refs  # clean output without refs
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PAPER_DOWNLOAD_TIMEOUT` | `120` | Download timeout in seconds |
+| `SERPER_API_KEY` | — | Google search and scraping via Serper.dev |
+| `S2_API_KEY` | — | Semantic Scholar API (optional, increases rate limits) |
+| `JINA_API_KEY` | — | Jina Reader for webpage content extraction |
+
+Search API keys can be set via shell env, `.env` in the working directory, or persistently via `search env set`.
+
+## Agent Skills
+
+This repo includes Claude Code skills for agent-driven research workflows. See [SKILLS.md](SKILLS.md) for details.
+
+| Skill | Command | Description |
+|-------|---------|-------------|
+| Research Coordinator | `/research-coordinator` | Analyzes the request and dispatches to the right workflow |
+| Deep Research | `/deep-research` | Broad-to-deep investigation of a topic |
+| Literature Review | `/literature-review` | Systematic survey of academic literature |
+| Fact Check | `/fact-check` | Verify claims against web and academic sources |
 
 ## Known limitations
 
