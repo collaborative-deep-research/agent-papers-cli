@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "paper-cli"
-version = "0.1.0"
-description = "A command-line tool for reading, skimming, and searching academic papers"
+version = "0.2.0"
+description = "CLI tools for reading academic papers and searching the web, academic literature, and biomedical databases"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -14,16 +14,19 @@ dependencies = [
     "pymupdf>=1.24",
     "pysbd>=0.3",
     "rich>=13.0",
+    "tenacity>=8.0",
+    "python-dotenv>=1.0",
 ]
 
 [project.scripts]
 paper = "paper.cli:cli"
+search = "search.cli:cli"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/paper"]
+packages = ["src/paper", "src/search"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
