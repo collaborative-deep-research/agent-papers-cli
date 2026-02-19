@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import tempfile
@@ -24,6 +25,17 @@ ARXIV_ID_PATTERNS = [
     # Old-style: arxiv.org/abs/cs/0123456
     re.compile(r"arxiv\.org/(?:abs|pdf)/([\w.-]+/\d{7}(?:v\d+)?)"),
 ]
+
+
+def _local_paper_id(abs_path: Path) -> str:
+    """Generate a unique paper_id for a local PDF from its absolute path.
+
+    Returns ``{stem}-{hash8}`` where hash8 is the first 8 chars of the
+    SHA-256 of the absolute path string.  This avoids cache collisions
+    when different directories contain PDFs with the same filename.
+    """
+    hash8 = hashlib.sha256(str(abs_path).encode()).hexdigest()[:8]
+    return f"{abs_path.stem}-{hash8}"
 
 
 def resolve_arxiv_id(reference: str) -> str | None:
@@ -53,8 +65,10 @@ def fetch_paper(reference: str) -> tuple[str, Path]:
     # Check if reference is a local PDF file
     ref_path = Path(reference).expanduser()
     if ref_path.suffix.lower() == ".pdf" and ref_path.is_file():
-        paper_id = ref_path.stem
-        return paper_id, ref_path.resolve()
+        abs_path = ref_path.resolve()
+        paper_id = _local_paper_id(abs_path)
+        storage.save_local_metadata(paper_id, abs_path)
+        return paper_id, abs_path
 
     arxiv_id = resolve_arxiv_id(reference)
     if arxiv_id is None:

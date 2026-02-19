@@ -32,7 +32,7 @@ paper highlight remove <ref> <id>      # Remove a highlight by ID
 
 `<ref>` accepts: `2302.13971`, `arxiv.org/abs/2302.13971`, `arxiv.org/pdf/2302.13971`, or a **local PDF path** like `./paper.pdf`
 
-Arxiv papers are downloaded once and cached in `~/.papers/`. Local PDFs are read directly from disk.
+Arxiv papers are downloaded once and cached in `~/.papers/`. Local PDFs are read directly from disk — each gets a unique cache directory based on its absolute path (`{stem}-{hash8}`), so two different `paper.pdf` files in different directories won't collide. If you modify a local PDF after it's been parsed, the stale cache is automatically detected and re-parsed.
 
 ## `search` commands
 

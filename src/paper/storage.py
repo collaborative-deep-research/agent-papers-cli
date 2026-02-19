@@ -78,6 +78,33 @@ def load_metadata(paper_id: str) -> Optional[dict]:
     return None
 
 
+def save_local_metadata(paper_id: str, source_path: Path) -> None:
+    """Save metadata for a local PDF, including mtime for staleness checks."""
+    meta = load_metadata(paper_id) or {}
+    meta.update({
+        "source": "local",
+        "source_path": str(source_path),
+        "source_mtime": source_path.stat().st_mtime,
+    })
+    save_metadata(paper_id, meta)
+
+
+def is_local_cache_stale(paper_id: str) -> bool:
+    """Check whether a local PDF's cached parse is stale.
+
+    Returns True only when the stored source mtime differs from the
+    current mtime on disk.  Returns False for arxiv papers (no
+    ``source`` key) and when the source file has been deleted.
+    """
+    meta = load_metadata(paper_id)
+    if not meta or meta.get("source") != "local":
+        return False
+    source_path = Path(meta["source_path"])
+    if not source_path.is_file():
+        return False
+    return source_path.stat().st_mtime != meta.get("source_mtime")
+
+
 def index_path() -> Path:
     return PAPERS_DIR / "index.json"
 

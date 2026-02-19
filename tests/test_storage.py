@@ -99,3 +99,38 @@ class TestCorruptedJson:
         storage.update_index("2302.13971", "LLaMA")
         papers = storage.list_papers()
         assert papers["2302.13971"] == "LLaMA"
+
+
+class TestLocalCacheStaleness:
+    def test_arxiv_paper_not_stale(self, tmp_papers_dir):
+        """Arxiv papers (no 'source' key) are never considered stale."""
+        storage.save_metadata("2302.13971", {"arxiv_id": "2302.13971"})
+        assert not storage.is_local_cache_stale("2302.13971")
+
+    def test_mtime_match_not_stale(self, tmp_papers_dir, tmp_path):
+        """Local PDF with matching mtime is not stale."""
+        pdf = tmp_path / "paper.pdf"
+        pdf.write_bytes(b"%PDF-1.4 fake")
+        storage.save_local_metadata("paper-abc12345", pdf)
+        assert not storage.is_local_cache_stale("paper-abc12345")
+
+    def test_mtime_mismatch_stale(self, tmp_papers_dir, tmp_path):
+        """Local PDF with changed mtime is stale."""
+        pdf = tmp_path / "paper.pdf"
+        pdf.write_bytes(b"%PDF-1.4 fake")
+        storage.save_local_metadata("paper-abc12345", pdf)
+        # Simulate file modification by writing new content
+        pdf.write_bytes(b"%PDF-1.4 updated content")
+        assert storage.is_local_cache_stale("paper-abc12345")
+
+    def test_deleted_source_not_stale(self, tmp_papers_dir, tmp_path):
+        """If source PDF was deleted, don't report stale (let fetch handle it)."""
+        pdf = tmp_path / "paper.pdf"
+        pdf.write_bytes(b"%PDF-1.4 fake")
+        storage.save_local_metadata("paper-abc12345", pdf)
+        pdf.unlink()
+        assert not storage.is_local_cache_stale("paper-abc12345")
+
+    def test_no_metadata_not_stale(self, tmp_papers_dir):
+        """Missing metadata means not stale."""
+        assert not storage.is_local_cache_stale("nonexistent")

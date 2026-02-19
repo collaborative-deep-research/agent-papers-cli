@@ -33,7 +33,7 @@ def parse_paper(arxiv_id: str, pdf_path: Path) -> Document:
 
     Uses cached result if available.
     """
-    if storage.has_parsed(arxiv_id):
+    if storage.has_parsed(arxiv_id) and not storage.is_local_cache_stale(arxiv_id):
         return Document.load(storage.parsed_path(arxiv_id))
 
     with fitz.open(pdf_path) as doc_fitz:
@@ -41,6 +41,14 @@ def parse_paper(arxiv_id: str, pdf_path: Path) -> Document:
 
     # Cache the parsed result
     document.save(storage.parsed_path(arxiv_id))
+
+    # Update mtime in metadata so the next cache-hit check passes
+    meta = storage.load_metadata(arxiv_id)
+    if meta and meta.get("source") == "local":
+        source_path = Path(meta["source_path"])
+        if source_path.is_file():
+            meta["source_mtime"] = source_path.stat().st_mtime
+            storage.save_metadata(arxiv_id, meta)
 
     # Update index with title
     if document.metadata.title:
