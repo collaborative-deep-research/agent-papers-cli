@@ -42,9 +42,9 @@ paper highlight list <ref>             # List stored highlights
 paper highlight remove <ref> <id>      # Remove a highlight by ID
 ```
 
-`<ref>` accepts: `2302.13971`, `arxiv.org/abs/2302.13971`, `arxiv.org/pdf/2302.13971`
+`<ref>` accepts: `2302.13971`, `arxiv.org/abs/2302.13971`, `arxiv.org/pdf/2302.13971`, or a **local PDF path** like `./paper.pdf`
 
-Papers are downloaded once and cached in `~/.papers/`.
+Arxiv papers are downloaded once and cached in `~/.papers/`. Local PDFs are read directly from disk — each gets a unique cache directory based on its absolute path (`{stem}-{hash8}`), so two different `paper.pdf` files in different directories won't collide. If you modify a local PDF after it's been parsed, the stale cache is automatically detected and re-parsed.
 
 ## `search` commands
 
@@ -245,7 +245,7 @@ src/search/                        # search CLI
 
 ### How it works
 
-1. **Fetch**: Downloads the PDF from arxiv and caches it in `~/.papers/<id>/`
+1. **Fetch**: Downloads the PDF from arxiv (and caches in `~/.papers/<id>/`) or reads a local PDF directly
 2. **Parse**: Extracts text with [PyMuPDF](https://pymupdf.readthedocs.io/), detects headings via PDF outline or font-size heuristics, splits sentences with [PySBD](https://github.com/nipunsadvilkar/pySBD), extracts links and citations
 3. **Detect** (optional, lazy): Detects figures, tables, and equations using [DocLayout-YOLO](https://github.com/opendatalab/DocLayout-YOLO) pre-trained on [DocStructBench](https://github.com/opendatalab/DocLayout-YOLO). Renders pages to images, runs YOLO detection, maps bounding boxes back to PDF coordinates. Supports MPS (Apple Metal), CUDA, and CPU. Runs on first `paper figures`/`tables`/`equations` call and is cached.
 4. **Display**: Renders structured output with [Rich](https://rich.readthedocs.io/), annotates with `[ref=...]` jump links
