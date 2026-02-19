@@ -18,7 +18,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import fitz  # PyMuPDF
-import numpy as np
 
 from paper.models import Box, LayoutElement
 
@@ -129,8 +128,10 @@ def _download_model(dest: Path) -> None:
 # Core detection
 # ------------------------------------------------------------------
 
-def _render_page(pdf_path: Path, page_num: int) -> tuple[np.ndarray, float, float]:
+def _render_page(pdf_path: Path, page_num: int):
     """Render a PDF page to a numpy array, returning (image, scale_x, scale_y)."""
+    import numpy as np
+
     with fitz.open(pdf_path) as doc:
         page = doc[page_num]
         pix = page.get_pixmap(dpi=_RENDER_DPI)
