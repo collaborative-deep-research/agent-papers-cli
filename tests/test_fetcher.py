@@ -2,7 +2,7 @@
 
 import pytest
 
-from paper.fetcher import resolve_arxiv_id
+from paper.fetcher import fetch_paper, resolve_arxiv_id
 
 
 class TestResolveArxivId:
@@ -35,3 +35,33 @@ class TestResolveArxivId:
 
     def test_five_digit_id(self):
         assert resolve_arxiv_id("2510.25744") == "2510.25744"
+
+
+class TestFetchPaperLocal:
+    def test_local_pdf(self, tmp_path):
+        pdf = tmp_path / "my_paper.pdf"
+        pdf.write_bytes(b"%PDF-1.4 fake")
+        paper_id, path = fetch_paper(str(pdf))
+        assert paper_id == "my_paper"
+        assert path == pdf.resolve()
+
+    def test_local_pdf_tilde(self, tmp_path, monkeypatch):
+        """Ensure ~ expansion works."""
+        pdf = tmp_path / "test.pdf"
+        pdf.write_bytes(b"%PDF-1.4 fake")
+        monkeypatch.setenv("HOME", str(tmp_path))
+        paper_id, path = fetch_paper("~/test.pdf")
+        assert paper_id == "test"
+        assert path == pdf.resolve()
+
+    def test_local_pdf_not_found(self):
+        """Non-existent .pdf path falls through to arxiv resolution."""
+        with pytest.raises(ValueError, match="Could not parse reference"):
+            fetch_paper("/nonexistent/path/paper.pdf")
+
+    def test_non_pdf_file_not_matched(self, tmp_path):
+        """A .txt file should not be treated as a local PDF."""
+        txt = tmp_path / "notes.txt"
+        txt.write_text("not a pdf")
+        with pytest.raises(ValueError, match="Could not parse reference"):
+            fetch_paper(str(txt))
