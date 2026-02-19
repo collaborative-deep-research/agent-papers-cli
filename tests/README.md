@@ -10,9 +10,9 @@
 | `test_parser.py` | Heading detection heuristics, sentence splitting, fragment merging |
 | `test_cli.py` | CLI smoke tests (help output, flag presence, error handling) |
 | `test_links.py` | Citation detection, ref registry building, `goto` rendering |
-| `test_fetcher.py` | ArXiv ID resolution from various URL formats |
+| `test_fetcher.py` | ArXiv ID resolution, local PDF ID generation (`{stem}-{hash8}`), local metadata saving |
 | `test_highlighter.py` | Highlight search, coordinate conversion, CRUD, storage |
-| `test_storage.py` | Cache directory management, JSON corruption recovery |
+| `test_storage.py` | Cache directory management, JSON corruption recovery, local PDF cache staleness detection |
 | `test_integration.py` | End-to-end parsing of real papers (see below) |
 
 ### search tests (`tests/search/`)

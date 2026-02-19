@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import tempfile
@@ -26,6 +27,17 @@ ARXIV_ID_PATTERNS = [
 ]
 
 
+def _local_paper_id(abs_path: Path) -> str:
+    """Generate a unique paper_id for a local PDF from its absolute path.
+
+    Returns ``{stem}-{hash8}`` where hash8 is the first 8 chars of the
+    SHA-256 of the absolute path string.  This avoids cache collisions
+    when different directories contain PDFs with the same filename.
+    """
+    hash8 = hashlib.sha256(str(abs_path).encode()).hexdigest()[:8]
+    return f"{abs_path.stem}-{hash8}"
+
+
 def resolve_arxiv_id(reference: str) -> str | None:
     """Extract arxiv ID from various input formats."""
     reference = reference.strip().rstrip("/")
@@ -45,16 +57,24 @@ def abs_url_for_id(arxiv_id: str) -> str:
 
 
 def fetch_paper(reference: str) -> tuple[str, Path]:
-    """Fetch a paper PDF, returning (arxiv_id, pdf_path).
+    """Fetch a paper PDF, returning (paper_id, pdf_path).
 
-    Downloads if not already cached. Uses atomic write to prevent
-    corrupt files from interrupted downloads.
+    Accepts arxiv IDs/URLs or local PDF file paths.
+    Downloads from arxiv if not already cached.
     """
+    # Check if reference is a local PDF file
+    ref_path = Path(reference).expanduser()
+    if ref_path.suffix.lower() == ".pdf" and ref_path.is_file():
+        abs_path = ref_path.resolve()
+        paper_id = _local_paper_id(abs_path)
+        storage.save_local_metadata(paper_id, abs_path)
+        return paper_id, abs_path
+
     arxiv_id = resolve_arxiv_id(reference)
     if arxiv_id is None:
         raise ValueError(
-            f"Could not parse arxiv ID from: {reference}\n"
-            "Accepted formats: 2301.12345, arxiv.org/abs/2301.12345, arxiv.org/pdf/2301.12345"
+            f"Could not parse reference: {reference}\n"
+            "Accepted formats: 2301.12345, arxiv.org/abs/2301.12345, /path/to/paper.pdf"
         )
 
     if storage.has_pdf(arxiv_id):

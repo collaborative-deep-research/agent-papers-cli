@@ -7,7 +7,8 @@ Two CLI tools in one repo: `paper` (read academic PDFs) and `search` (web + acad
 - **Entry points**: `paper = paper.cli:cli`, `search = search.cli:cli` (Click)
 - **paper modules**: `cli.py`, `parser.py`, `fetcher.py`, `storage.py`, `renderer.py`, `models.py`, `highlighter.py`
 - **search modules**: `cli.py`, `config.py`, `models.py`, `renderer.py`, `backends/{google,semanticscholar,pubmed,browse}.py`
-- **Cache**: `~/.papers/<arxiv_id>/` (papers: `paper.pdf`, `parsed.json`, `metadata.json`, `highlights.json`, `paper_annotated.pdf`), `~/.papers/.env` (persistent API keys)
+- **Cache**: `~/.papers/<paper_id>/` (papers: `paper.pdf`, `parsed.json`, `metadata.json`, `highlights.json`, `paper_annotated.pdf`), `~/.papers/.env` (persistent API keys)
+- **Local PDFs**: Pass a file path (e.g., `./paper.pdf`) instead of an arxiv ID — reads directly, no download. Cache uses `{stem}-{hash8}` IDs (SHA-256 of absolute path) to avoid collisions. Stale caches are detected via mtime comparison.
 - **Tests**: `pytest` — paper tests in `tests/` (124 tests), search tests in `tests/search/` (69 tests)
 - **Agent skills**: `.claude/skills/` — research-coordinator, deep-research, literature-review, fact-check
 
