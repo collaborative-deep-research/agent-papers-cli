@@ -10,7 +10,7 @@ CLI tools for reading academic papers and searching the web, academic literature
 ```bash
 uv pip install -e .
 
-# Optional: enable figure/table/equation detection (requires ~225MB for model)
+# Optional: enable figure/table/equation detection (requires ~40MB for model)
 uv pip install -e ".[layout]"
 ```
 
@@ -199,7 +199,7 @@ Highlights are stored in `~/.papers/<id>/highlights.json` and optionally annotat
 
 ### Detect figures, tables, and equations
 
-Requires `pip install paper-cli[layout]` (installs `ultralytics`). Model weights (~25MB) are downloaded automatically on first use to `~/.papers/.models/`.
+Requires `pip install paper-cli[layout]` (installs `doclayout_yolo`). Model weights (~40MB) are downloaded automatically on first use to `~/.papers/.models/`.
 
 ```bash
 # Run detection (results cached in ~/.papers/<id>/layout.json)
@@ -216,7 +216,7 @@ paper goto 2302.13971 t2    # table 2
 paper goto 2302.13971 eq3   # equation 3
 ```
 
-Detection uses [DocLayout-YOLO](https://github.com/opendatalab/DocLayout-YOLO) trained on DocLayNet (11 categories including Formula). Supports CUDA, MPS (Apple Silicon), and CPU. Running `paper figures` etc. triggers detection lazily on first use — subsequent calls use the cached result.
+Detection uses [DocLayout-YOLO](https://github.com/opendatalab/DocLayout-YOLO) trained on DocStructBench (10 categories including figures, tables, and formulas). Supports CUDA, MPS (Apple Silicon), and CPU. Running `paper figures` etc. triggers detection lazily on first use — subsequent calls use the cached result.
 
 ## Architecture
 
@@ -247,7 +247,7 @@ src/search/                        # search CLI
 
 1. **Fetch**: Downloads the PDF from arxiv and caches it in `~/.papers/<id>/`
 2. **Parse**: Extracts text with [PyMuPDF](https://pymupdf.readthedocs.io/), detects headings via PDF outline or font-size heuristics, splits sentences with [PySBD](https://github.com/nipunsadvilkar/pySBD), extracts links and citations
-3. **Detect** (optional, lazy): Detects figures, tables, and equations using [DocLayout-YOLO](https://github.com/opendatalab/DocLayout-YOLO) pre-trained on [DocLayNet](https://github.com/DS4SD/DocLayNet). Renders pages to images, runs YOLO detection, maps bounding boxes back to PDF coordinates. Supports MPS (Apple Metal), CUDA, and CPU. Runs on first `paper figures`/`tables`/`equations` call and is cached.
+3. **Detect** (optional, lazy): Detects figures, tables, and equations using [DocLayout-YOLO](https://github.com/opendatalab/DocLayout-YOLO) pre-trained on [DocStructBench](https://github.com/opendatalab/DocLayout-YOLO). Renders pages to images, runs YOLO detection, maps bounding boxes back to PDF coordinates. Supports MPS (Apple Metal), CUDA, and CPU. Runs on first `paper figures`/`tables`/`equations` call and is cached.
 4. **Display**: Renders structured output with [Rich](https://rich.readthedocs.io/), annotates with `[ref=...]` jump links
 
 The parsed structure is cached as JSON so subsequent commands are instant. Layout detection results are cached separately in `layout.json`.

@@ -19,7 +19,7 @@ Two CLI tools in one repo: `paper` (read academic PDFs) and `search` (web + acad
 - Data model inspired by papermage: flat `raw_text` + `Section` list with character-offset `Span`s
 - Downloads use atomic temp-file-then-rename pattern
 - Storage sanitizes paper IDs to prevent path traversal
-- Layout detection (optional `[layout]` extra) uses DocLayout-YOLO via ultralytics
+- Layout detection (optional `[layout]` extra) uses DocLayout-YOLO via doclayout_yolo
 - Layout detection is lazy: runs on first `paper figures`/`tables`/`equations` call, cached in `layout.json`
 - Supports MPS (Apple Metal), CUDA, and CPU backends for inference
 - Model weights auto-downloaded to `~/.papers/.models/` on first use

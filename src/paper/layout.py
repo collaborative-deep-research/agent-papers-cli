@@ -1,7 +1,7 @@
 """Detect figures, tables, and equations in PDF pages using DocLayout-YOLO.
 
-Uses the ultralytics library with a DocLayout-YOLO model pre-trained on
-DocLayNet.  Model weights are downloaded lazily to ~/.papers/.models/ on
+Uses the doclayout_yolo library with a DocLayout-YOLO model pre-trained on
+DocStructBench.  Model weights are downloaded lazily to ~/.papers/.models/ on
 first use.  Detection results are cached per-paper in layout.json.
 
 Supports MPS (Apple Metal), CUDA, and CPU backends — PyTorch picks the
@@ -18,18 +18,23 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import fitz  # PyMuPDF
+import numpy as np
 
 from paper.models import Box, LayoutElement
 
 if TYPE_CHECKING:
-    from ultralytics import YOLO
+    from doclayout_yolo import YOLOv10
 
 logger = logging.getLogger(__name__)
 
-# DocLayNet category names produced by DocLayout-YOLO.
-# We only keep the three we care about; the rest (Text, Title, etc.) are
-# already handled by the text parser.
+# DocLayout-YOLO class names → our element kinds.
+# We only keep the three we care about; the rest (plain text, title, etc.)
+# are already handled by the text parser.
 _KIND_MAP: dict[str, str] = {
+    "figure": "figure",
+    "table": "table",
+    "isolate_formula": "equation",
+    # Aliases in case model variant uses different names:
     "Picture": "figure",
     "Figure": "figure",
     "Table": "table",
@@ -40,10 +45,10 @@ _KIND_MAP: dict[str, str] = {
 _RENDER_DPI = 150  # good speed/accuracy balance for detection
 
 # Default DocLayout-YOLO model identifier — resolved at download time.
-_DEFAULT_MODEL = "juliozhao/DocLayout-YOLO"
+_DEFAULT_MODEL = "juliozhao/DocLayout-YOLO-DocStructBench"
 _MODEL_FILENAME = "doclayout_yolo_docstructbench_imgsz1024.pt"
 
-_model_instance: YOLO | None = None
+_model_instance: YOLOv10 | None = None
 
 
 # ------------------------------------------------------------------
@@ -69,17 +74,17 @@ def _best_device() -> str:
     return "cpu"
 
 
-def _load_model() -> YOLO:
+def _load_model() -> YOLOv10:
     """Load (and lazily download) the DocLayout-YOLO model."""
     global _model_instance
     if _model_instance is not None:
         return _model_instance
 
     try:
-        from ultralytics import YOLO
+        from doclayout_yolo import YOLOv10
     except ImportError:
         raise ImportError(
-            "Layout detection requires the 'ultralytics' package.\n"
+            "Layout detection requires the 'doclayout_yolo' package.\n"
             "Install it with:  pip install paper-cli[layout]"
         )
 
@@ -89,7 +94,7 @@ def _load_model() -> YOLO:
         logger.info("Downloading DocLayout-YOLO model (first time only)...")
         _download_model(model_path)
 
-    _model_instance = YOLO(str(model_path))
+    _model_instance = YOLOv10(str(model_path))
     return _model_instance
 
 
@@ -124,14 +129,18 @@ def _download_model(dest: Path) -> None:
 # Core detection
 # ------------------------------------------------------------------
 
-def _render_page(pdf_path: Path, page_num: int) -> tuple[bytes, float, float]:
-    """Render a PDF page to PNG bytes, returning (png_bytes, scale_x, scale_y)."""
+def _render_page(pdf_path: Path, page_num: int) -> tuple[np.ndarray, float, float]:
+    """Render a PDF page to a numpy array, returning (image, scale_x, scale_y)."""
     with fitz.open(pdf_path) as doc:
         page = doc[page_num]
         pix = page.get_pixmap(dpi=_RENDER_DPI)
         scale_x = page.rect.width / pix.width
         scale_y = page.rect.height / pix.height
-        return pix.tobytes("png"), scale_x, scale_y
+        # Convert pixmap to numpy array (RGB)
+        img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.height, pix.width, pix.n)
+        if pix.n == 4:  # RGBA → RGB
+            img = img[:, :, :3]
+        return img, scale_x, scale_y
 
 
 def detect_page(pdf_path: Path, page_num: int, conf: float = 0.25) -> list[LayoutElement]:
@@ -139,8 +148,8 @@ def detect_page(pdf_path: Path, page_num: int, conf: float = 0.25) -> list[Layou
     model = _load_model()
     device = _best_device()
 
-    png_bytes, scale_x, scale_y = _render_page(pdf_path, page_num)
-    results = model(png_bytes, device=device, conf=conf, verbose=False)
+    img, scale_x, scale_y = _render_page(pdf_path, page_num)
+    results = model(img, device=device, conf=conf, verbose=False)
 
     elements: list[LayoutElement] = []
     for det in results[0].boxes:

@@ -162,6 +162,11 @@ class TestKindMap:
     def test_kind_map_covers_expected_classes(self):
         from paper.layout import _KIND_MAP
 
+        # Primary names from DocLayout-YOLO DocStructBench model
+        assert _KIND_MAP["figure"] == "figure"
+        assert _KIND_MAP["table"] == "table"
+        assert _KIND_MAP["isolate_formula"] == "equation"
+        # Aliases for other model variants
         assert _KIND_MAP["Picture"] == "figure"
         assert _KIND_MAP["Figure"] == "figure"
         assert _KIND_MAP["Table"] == "table"
