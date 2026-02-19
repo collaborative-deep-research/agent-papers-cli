@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 import fitz  # PyMuPDF
 
 from paper.models import Box, LayoutElement
+from paper.storage import layout_path, has_layout
 
 if TYPE_CHECKING:
     from doclayout_yolo import YOLOv10
@@ -298,15 +299,6 @@ def _save_element_images(
 # Caching
 # ------------------------------------------------------------------
 
-def layout_path(paper_id: str) -> Path:
-    from paper import storage
-    return storage.paper_dir(paper_id) / "layout.json"
-
-
-def has_layout(paper_id: str) -> bool:
-    return layout_path(paper_id).exists()
-
-
 def save_layout(paper_id: str, elements: list[LayoutElement]) -> None:
     """Save layout detection results to cache."""
     data = [asdict(e) for e in elements]
@@ -318,10 +310,12 @@ def save_layout(paper_id: str, elements: list[LayoutElement]) -> None:
 
 def load_layout(paper_id: str) -> list[LayoutElement]:
     """Load cached layout detection results."""
+    from paper.storage import _safe_json_load
+
     path = layout_path(paper_id)
     if not path.exists():
         return []
-    data = json.loads(path.read_text())
+    data = _safe_json_load(path, fallback=[])
     return [
         LayoutElement(
             kind=d["kind"],
@@ -345,7 +339,7 @@ def detect_layout(paper_id: str, pdf_path: Path, force: bool = False) -> list[La
     if not force and has_layout(paper_id):
         elements = load_layout(paper_id)
         # Regenerate images if missing (e.g., upgrading from older cache)
-        if elements and not elements[0].image_path:
+        if elements and any(not e.image_path for e in elements):
             _save_element_images(elements, pdf_path)
             save_layout(paper_id, elements)
         return elements

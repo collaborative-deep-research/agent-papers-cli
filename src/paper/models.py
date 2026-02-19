@@ -164,6 +164,7 @@ class Document:
                 confidence=le["confidence"],
                 caption=le.get("caption", ""),
                 label=le.get("label", ""),
+                image_path=le.get("image_path", ""),
             )
             for le in data.get("layout_elements", [])
         ]
