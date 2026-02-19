@@ -12,6 +12,7 @@
 | `test_links.py` | Citation detection, ref registry building, `goto` rendering |
 | `test_fetcher.py` | ArXiv ID resolution from various URL formats |
 | `test_highlighter.py` | Highlight search, coordinate conversion, CRUD, storage |
+| `test_layout.py` | Layout detection models, caching, ref registry, label assignment, storage |
 | `test_storage.py` | Cache directory management, JSON corruption recovery |
 | `test_integration.py` | End-to-end parsing of real papers (see below) |
 

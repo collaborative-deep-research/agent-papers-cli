@@ -70,6 +70,16 @@ class Metadata:
 
 
 @dataclass
+class LayoutElement:
+    """A detected layout element (figure, table, equation)."""
+    kind: str           # "figure", "table", "equation"
+    box: Box            # bounding box in PDF coordinates
+    confidence: float   # detection confidence (0-1)
+    caption: str = ""   # extracted caption text (if any)
+    label: str = ""     # "Figure 1", "Table 2", "Eq. 3"
+
+
+@dataclass
 class Highlight:
     """A persisted highlight on a paper."""
     id: int
@@ -89,6 +99,7 @@ class Document:
     raw_text: str = ""
     pages: list[dict] = field(default_factory=list)
     links: list[Link] = field(default_factory=list)
+    layout_elements: list[LayoutElement] = field(default_factory=list)
 
     def save(self, path: Path) -> None:
         path.write_text(json.dumps(asdict(self), indent=2, ensure_ascii=False))
@@ -145,10 +156,21 @@ class Document:
             )
             for lk in data.get("links", [])
         ]
+        layout_elements = [
+            LayoutElement(
+                kind=le["kind"],
+                box=Box(**le["box"]),
+                confidence=le["confidence"],
+                caption=le.get("caption", ""),
+                label=le.get("label", ""),
+            )
+            for le in data.get("layout_elements", [])
+        ]
         return cls(
             metadata=meta,
             sections=sections,
             raw_text=data.get("raw_text", ""),
             pages=data.get("pages", []),
             links=links,
+            layout_elements=layout_elements,
         )

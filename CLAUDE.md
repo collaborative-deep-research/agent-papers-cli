@@ -5,9 +5,9 @@ Two CLI tools in one repo: `paper` (read academic PDFs) and `search` (web + acad
 ## Quick reference
 
 - **Entry points**: `paper = paper.cli:cli`, `search = search.cli:cli` (Click)
-- **paper modules**: `cli.py`, `parser.py`, `fetcher.py`, `storage.py`, `renderer.py`, `models.py`, `highlighter.py`
+- **paper modules**: `cli.py`, `parser.py`, `fetcher.py`, `storage.py`, `renderer.py`, `models.py`, `highlighter.py`, `layout.py`
 - **search modules**: `cli.py`, `config.py`, `models.py`, `renderer.py`, `backends/{google,semanticscholar,pubmed,browse}.py`
-- **Cache**: `~/.papers/<arxiv_id>/` (papers: `paper.pdf`, `parsed.json`, `metadata.json`, `highlights.json`, `paper_annotated.pdf`), `~/.papers/.env` (persistent API keys)
+- **Cache**: `~/.papers/<paper_id>/` (papers: `paper.pdf`, `parsed.json`, `metadata.json`, `highlights.json`, `layout.json`, `paper_annotated.pdf`), `~/.papers/.models/` (YOLO weights), `~/.papers/.env` (persistent API keys)
 - **Tests**: `pytest` — paper tests in `tests/` (124 tests), search tests in `tests/search/` (69 tests)
 - **Agent skills**: `.claude/skills/` — research-coordinator, deep-research, literature-review, fact-check
 
@@ -19,6 +19,10 @@ Two CLI tools in one repo: `paper` (read academic PDFs) and `search` (web + acad
 - Data model inspired by papermage: flat `raw_text` + `Section` list with character-offset `Span`s
 - Downloads use atomic temp-file-then-rename pattern
 - Storage sanitizes paper IDs to prevent path traversal
+- Layout detection (optional `[layout]` extra) uses DocLayout-YOLO via ultralytics
+- Layout detection is lazy: runs on first `paper figures`/`tables`/`equations` call, cached in `layout.json`
+- Supports MPS (Apple Metal), CUDA, and CPU backends for inference
+- Model weights auto-downloaded to `~/.papers/.models/` on first use
 
 ### search
 - Thin httpx wrappers over external APIs (Serper, Semantic Scholar, PubMed, Jina)
