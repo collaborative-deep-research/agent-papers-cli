@@ -125,6 +125,29 @@ class TestLayoutCaching:
         assert loaded[1].kind == "equation"
         assert loaded[1].label == "Eq. 1"
 
+    def test_save_and_load_image_path(self, tmp_path, monkeypatch):
+        from paper.layout import save_layout, load_layout
+
+        monkeypatch.setattr(
+            "paper.layout.layout_path",
+            lambda paper_id: tmp_path / "layout.json",
+        )
+
+        elements = [
+            LayoutElement(
+                kind="figure",
+                box=Box(x0=10, y0=20, x1=300, y1=400, page=0),
+                confidence=0.95,
+                label="Figure 1",
+                image_path="/tmp/layout/f1.png",
+            ),
+        ]
+
+        save_layout("test-id", elements)
+        loaded = load_layout("test-id")
+
+        assert loaded[0].image_path == "/tmp/layout/f1.png"
+
     def test_load_layout_missing_file(self, tmp_path, monkeypatch):
         from paper.layout import load_layout
 
@@ -156,6 +179,26 @@ class TestAssignLabels:
         assert elements[2].label == "Figure 2"
         assert elements[3].label == "Eq. 1"
         assert elements[4].label == "Table 2"
+
+
+class TestLabelToRefId:
+    def test_figure_label(self):
+        from paper.layout import _label_to_ref_id
+
+        elem = LayoutElement(kind="figure", box=Box(0, 0, 1, 1, 0), confidence=0.9, label="Figure 1")
+        assert _label_to_ref_id(elem) == "f1"
+
+    def test_table_label(self):
+        from paper.layout import _label_to_ref_id
+
+        elem = LayoutElement(kind="table", box=Box(0, 0, 1, 1, 0), confidence=0.9, label="Table 12")
+        assert _label_to_ref_id(elem) == "t12"
+
+    def test_equation_label(self):
+        from paper.layout import _label_to_ref_id
+
+        elem = LayoutElement(kind="equation", box=Box(0, 0, 1, 1, 0), confidence=0.9, label="Eq. 3")
+        assert _label_to_ref_id(elem) == "eq3"
 
 
 class TestKindMap:

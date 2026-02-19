@@ -841,6 +841,8 @@ def _render_layout_element(elem: LayoutElement, ref_id: str) -> None:
     console.print(f"  [dim]Page {elem.box.page + 1} · "
                   f"bbox ({elem.box.x0:.0f}, {elem.box.y0:.0f}, {elem.box.x1:.0f}, {elem.box.y1:.0f}) · "
                   f"conf {elem.confidence:.0%}[/dim]")
+    if elem.image_path:
+        console.print(f"  [dim]Image:[/dim] {elem.image_path}")
     if elem.caption:
         console.print(f"  {elem.caption}")
     console.print()

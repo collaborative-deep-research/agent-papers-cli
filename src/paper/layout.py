@@ -194,6 +194,9 @@ def detect_all_pages(pdf_path: Path, conf: float = 0.25) -> list[LayoutElement]:
     # Extract captions
     _extract_captions(all_elements, pdf_path)
 
+    # Save cropped screenshots
+    _save_element_images(all_elements, pdf_path)
+
     return all_elements
 
 
@@ -241,6 +244,56 @@ def _extract_captions(elements: list[LayoutElement], pdf_path: Path) -> None:
 
 
 # ------------------------------------------------------------------
+# Element screenshots
+# ------------------------------------------------------------------
+
+_CROP_DPI = 200  # higher DPI for readable cropped images
+
+_REF_PREFIX = {"figure": "f", "table": "t", "equation": "eq"}
+
+
+def _label_to_ref_id(elem: LayoutElement) -> str:
+    """Derive ref ID from label: 'Figure 1' → 'f1', 'Table 2' → 't2', 'Eq. 3' → 'eq3'."""
+    prefix = _REF_PREFIX.get(elem.kind, "")
+    num = re.search(r"\d+", elem.label)
+    return f"{prefix}{num.group()}" if num else ""
+
+
+def _save_element_images(
+    elements: list[LayoutElement], pdf_path: Path
+) -> None:
+    """Crop each detected element from the PDF and save as PNG."""
+    if not elements:
+        return
+
+    from paper import storage
+
+    # Determine the paper_id from pdf_path by checking which cache dir it lives in
+    paper_dir = pdf_path.parent
+    img_dir = paper_dir / "layout"
+    img_dir.mkdir(parents=True, exist_ok=True)
+
+    # Group elements by page to render each page only once
+    by_page: dict[int, list[LayoutElement]] = {}
+    for elem in elements:
+        by_page.setdefault(elem.box.page, []).append(elem)
+
+    with fitz.open(pdf_path) as doc:
+        for page_num, page_elements in by_page.items():
+            page = doc[page_num]
+            for elem in page_elements:
+                ref_id = _label_to_ref_id(elem)
+                if not ref_id:
+                    continue
+                out_path = img_dir / f"{ref_id}.png"
+                # Clip to the bounding box and render at higher DPI
+                clip = fitz.Rect(elem.box.x0, elem.box.y0, elem.box.x1, elem.box.y1)
+                pix = page.get_pixmap(dpi=_CROP_DPI, clip=clip)
+                pix.save(str(out_path))
+                elem.image_path = str(out_path)
+
+
+# ------------------------------------------------------------------
 # Caching
 # ------------------------------------------------------------------
 
@@ -275,6 +328,7 @@ def load_layout(paper_id: str) -> list[LayoutElement]:
             confidence=d["confidence"],
             caption=d.get("caption", ""),
             label=d.get("label", ""),
+            image_path=d.get("image_path", ""),
         )
         for d in data
     ]
@@ -288,7 +342,12 @@ def detect_layout(paper_id: str, pdf_path: Path, force: bool = False) -> list[La
     lazily on first access.
     """
     if not force and has_layout(paper_id):
-        return load_layout(paper_id)
+        elements = load_layout(paper_id)
+        # Regenerate images if missing (e.g., upgrading from older cache)
+        if elements and not elements[0].image_path:
+            _save_element_images(elements, pdf_path)
+            save_layout(paper_id, elements)
+        return elements
 
     elements = detect_all_pages(pdf_path)
     save_layout(paper_id, elements)

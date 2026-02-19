@@ -77,6 +77,7 @@ class LayoutElement:
     confidence: float   # detection confidence (0-1)
     caption: str = ""   # extracted caption text (if any)
     label: str = ""     # "Figure 1", "Table 2", "Eq. 3"
+    image_path: str = ""  # path to cropped PNG screenshot
 
 
 @dataclass
