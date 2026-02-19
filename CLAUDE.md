@@ -5,9 +5,9 @@ Two CLI tools in one repo: `paper` (read academic PDFs) and `search` (web + acad
 ## Quick reference
 
 - **Entry points**: `paper = paper.cli:cli`, `search = search.cli:cli` (Click)
-- **paper modules**: `cli.py`, `parser.py`, `fetcher.py`, `storage.py`, `renderer.py`, `models.py`, `highlighter.py`
+- **paper modules**: `cli.py`, `parser.py`, `fetcher.py`, `storage.py`, `renderer.py`, `models.py`, `highlighter.py`, `layout.py`
 - **search modules**: `cli.py`, `config.py`, `models.py`, `renderer.py`, `backends/{google,semanticscholar,pubmed,browse}.py`
-- **Cache**: `~/.papers/<paper_id>/` (papers: `paper.pdf`, `parsed.json`, `metadata.json`, `highlights.json`, `paper_annotated.pdf`), `~/.papers/.env` (persistent API keys)
+- **Cache**: `~/.papers/<paper_id>/` (papers: `paper.pdf`, `parsed.json`, `metadata.json`, `highlights.json`, `layout.json`, `layout/*.png`, `paper_annotated.pdf`), `~/.papers/.models/` (YOLO weights), `~/.papers/.env` (persistent API keys)
 - **Local PDFs**: Pass a file path (e.g., `./paper.pdf`) instead of an arxiv ID — reads directly, no download. Cache uses `{stem}-{hash8}` IDs (SHA-256 of absolute path) to avoid collisions. Stale caches are detected via mtime comparison.
 - **Tests**: `pytest` — paper tests in `tests/` (124 tests), search tests in `tests/search/` (69 tests)
 - **Agent skills**: `.claude/skills/` — research-coordinator, deep-research, literature-review, fact-check
@@ -20,6 +20,11 @@ Two CLI tools in one repo: `paper` (read academic PDFs) and `search` (web + acad
 - Data model inspired by papermage: flat `raw_text` + `Section` list with character-offset `Span`s
 - Downloads use atomic temp-file-then-rename pattern
 - Storage sanitizes paper IDs to prevent path traversal
+- Layout detection (optional `[layout]` extra) uses DocLayout-YOLO via doclayout_yolo
+- Layout detection is lazy: runs on first `paper figures`/`tables`/`equations` call, cached in `layout.json`
+- Supports MPS (Apple Metal), CUDA, and CPU backends for inference
+- Model weights auto-downloaded from [collab-dr/DocLayout-YOLO-DocStructBench](https://huggingface.co/collab-dr/DocLayout-YOLO-DocStructBench) (pinned fork) to `~/.papers/.models/` on first use
+- Detected elements are cropped as PNG screenshots to `~/.papers/<id>/layout/`
 
 ### search
 - Thin httpx wrappers over external APIs (Serper, Semantic Scholar, PubMed, Jina)

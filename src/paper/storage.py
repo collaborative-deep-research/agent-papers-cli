@@ -129,6 +129,14 @@ def list_papers() -> dict[str, str]:
     return {}
 
 
+def layout_path(paper_id: str) -> Path:
+    return paper_dir(paper_id) / "layout.json"
+
+
+def has_layout(paper_id: str) -> bool:
+    return layout_path(paper_id).exists()
+
+
 def highlights_path(paper_id: str) -> Path:
     return paper_dir(paper_id) / "highlights.json"
 

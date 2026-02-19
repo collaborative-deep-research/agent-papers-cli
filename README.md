@@ -9,6 +9,9 @@ CLI tools for reading academic papers and searching the web, academic literature
 
 ```bash
 uv pip install -e .
+
+# Optional: enable figure/table/equation detection (requires ~40MB for model)
+uv pip install -e ".[layout]"
 ```
 
 Requires Python 3.10+.
@@ -22,6 +25,15 @@ paper skim <ref> --lines N --level L   # Headings + first N sentences
 paper search <ref> "query"             # Keyword search with context
 paper info <ref>                       # Show metadata
 paper goto <ref> <ref_id>              # Jump to a section, link, or citation
+
+# Layout detection (requires `pip install paper-cli[layout]`)
+paper detect <ref>                     # Run figure/table/equation detection
+paper figures <ref>                    # List detected figures with captions
+paper tables <ref>                     # List detected tables
+paper equations <ref>                  # List detected equations
+paper goto <ref> f1                    # Jump to figure 1
+paper goto <ref> t2                    # Jump to table 2
+paper goto <ref> eq3                   # Jump to equation 3
 
 # Highlights
 paper highlight search <ref> "query"   # Search PDF for text (with coordinates)
@@ -78,13 +90,16 @@ Keys are saved to `~/.papers/.env` and loaded automatically. Shell environment v
 All output is annotated with `[ref=...]` markers that agents (or humans) can follow up on:
 
 - `[ref=s3]` — section (jump to section 3)
+- `[ref=f1]` — figure (show bounding box and caption)
+- `[ref=t2]` — table (show bounding box and caption)
+- `[ref=eq1]` — equation (show bounding box)
 - `[ref=e1]` — external link (show URL and context)
 - `[ref=c5]` — citation (look up reference [5] in the bibliography)
 
 Use `paper goto <ref> <ref_id>` to follow any marker. A summary footer shows the available ref ranges:
 
 ```
-Refs: s1..s12 (sections) · e1..e8 (links) · c1..c24 (citations)
+Refs: s1..s12 (sections) · f1..f5 (figures) · t1..t3 (tables) · eq1..eq8 (equations) · e1..e8 (links) · c1..c24 (citations)
 Use: paper goto 2302.13971 <ref>
 ```
 
@@ -182,6 +197,27 @@ paper highlight remove 2501.12948 1
 
 Highlights are stored in `~/.papers/<id>/highlights.json` and optionally annotated onto `paper_annotated.pdf`.
 
+### Detect figures, tables, and equations
+
+Requires `pip install paper-cli[layout]` (installs `doclayout_yolo`). Model weights (~40MB) are downloaded automatically on first use to `~/.papers/.models/`.
+
+```bash
+# Run detection (results cached in ~/.papers/<id>/layout.json)
+paper detect 2302.13971
+
+# List detected elements
+paper figures 2302.13971
+paper tables 2302.13971
+paper equations 2302.13971
+
+# Jump to a specific element
+paper goto 2302.13971 f1    # figure 1
+paper goto 2302.13971 t2    # table 2
+paper goto 2302.13971 eq3   # equation 3
+```
+
+Detection uses [DocLayout-YOLO](https://github.com/opendatalab/DocLayout-YOLO) trained on DocStructBench (10 categories including figures, tables, and formulas). Model weights are from our [pinned fork](https://huggingface.co/collab-dr/DocLayout-YOLO-DocStructBench). Supports CUDA, MPS (Apple Silicon), and CPU. Running `paper figures` etc. triggers detection lazily on first use — subsequent calls use the cached result. Each detected element is cropped as a PNG screenshot to `~/.papers/<id>/layout/` (e.g., `f1.png`, `t2.png`, `eq3.png`).
+
 ## Architecture
 
 ```
@@ -189,7 +225,8 @@ src/paper/                         # paper CLI
 ├── cli.py         # Click CLI — all commands defined here
 ├── fetcher.py     # Downloads PDFs from arxiv, manages cache
 ├── highlighter.py # PDF text search, coordinate conversion, highlight CRUD, PDF annotation
-├── models.py      # Data models: Document, Section, Sentence, Span, Box, Metadata, Link, Highlight
+├── layout.py      # Figure/table/equation detection via DocLayout-YOLO (optional)
+├── models.py      # Data models: Document, Section, Sentence, Span, Box, Metadata, Link, LayoutElement, Highlight
 ├── parser.py      # PDF → Document: text extraction, heading detection, sentence splitting
 ├── renderer.py    # Rich terminal output, ref registry, goto rendering
 └── storage.py     # ~/.papers/ cache directory management
@@ -210,17 +247,19 @@ src/search/                        # search CLI
 
 1. **Fetch**: Downloads the PDF from arxiv (and caches in `~/.papers/<id>/`) or reads a local PDF directly
 2. **Parse**: Extracts text with [PyMuPDF](https://pymupdf.readthedocs.io/), detects headings via PDF outline or font-size heuristics, splits sentences with [PySBD](https://github.com/nipunsadvilkar/pySBD), extracts links and citations
-3. **Display**: Renders structured output with [Rich](https://rich.readthedocs.io/), annotates with `[ref=...]` jump links
+3. **Detect** (optional, lazy): Detects figures, tables, and equations using [DocLayout-YOLO](https://github.com/opendatalab/DocLayout-YOLO) pre-trained on [DocStructBench](https://github.com/opendatalab/DocLayout-YOLO). Renders pages to images, runs YOLO detection, maps bounding boxes back to PDF coordinates. Supports MPS (Apple Metal), CUDA, and CPU. Runs on first `paper figures`/`tables`/`equations` call and is cached.
+4. **Display**: Renders structured output with [Rich](https://rich.readthedocs.io/), annotates with `[ref=...]` jump links
 
-The parsed structure is cached as JSON so subsequent commands are instant.
+The parsed structure is cached as JSON so subsequent commands are instant. Layout detection results are cached separately in `layout.json`.
 
 ### Data model
 
 Simplified flat-layer approach inspired by [papermage](https://github.com/allenai/papermage):
 
-- **Document** has a `raw_text` string, list of `Section`s, and list of `Link`s
+- **Document** has a `raw_text` string, list of `Section`s, `Link`s, and `LayoutElement`s
 - Each **Section** has a heading, level, content, and list of `Sentence`s
 - Each **Link** has a kind (`external`/`internal`/`citation`), anchor text, URL, and page
+- **LayoutElement** stores a detected figure, table, or equation with bounding `Box`, confidence, caption, label, and `image_path` (cropped PNG)
 - **Highlight** stores persisted highlights with page, bounding rects (absolute PDF coords), color, and note
 - **Span** objects store character offsets into `raw_text`, enabling text-to-PDF coordinate mapping
 - Everything serializes to JSON for caching
@@ -265,6 +304,11 @@ paper goto 2302.13971 s2            # jump to section
 paper goto 2502.13811 e1            # jump to external link
 paper outline 2302.13971 --no-refs  # clean output without refs
 paper highlight search 2501.12948 "reinforcement learning"  # highlight search
+
+# Layout detection (requires paper-cli[layout])
+paper detect 2302.13971              # run figure/table/equation detection
+paper figures 2302.13971             # list detected figures
+paper goto 2302.13971 f1             # jump to figure 1
 ```
 
 ### Environment variables
@@ -300,7 +344,8 @@ This repo includes Claude Code skills for agent-driven research workflows. See [
 ## Future plans
 
 - [GROBID](https://github.com/kermitt2/grobid) backend for ML-based section detection
-- Figure/table refs (`[ref=f...]`) — needs caption detection logic
 - Named citation detection for non-hyperlinked author-year citations (hyperlinked ones already work via `LINK_NAMED`)
 - Richer document model inspired by [papermage](https://github.com/allenai/papermage)
-- Better handling of tables, figures, equations
+- Equation recognition to LaTeX (via [UniMERNet](https://github.com/opendatalab/UniMERNet) or [LaTeX-OCR](https://github.com/lukas-blecher/LaTeX-OCR))
+- Table structure recognition (cell-level extraction)
+- Fine-tuning DocLayout-YOLO on custom academic paper datasets

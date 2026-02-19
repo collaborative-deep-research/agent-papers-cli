@@ -23,6 +23,7 @@ paper = "paper.cli:cli"
 search = "search.cli:cli"
 
 [project.optional-dependencies]
+layout = ["doclayout-yolo>=0.0.4", "huggingface-hub>=0.20"]
 dev = ["pytest>=8.0"]
 
 [tool.hatch.build.targets.wheel]
