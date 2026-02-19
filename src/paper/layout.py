@@ -45,7 +45,7 @@ _KIND_MAP: dict[str, str] = {
 _RENDER_DPI = 150  # good speed/accuracy balance for detection
 
 # Default DocLayout-YOLO model identifier — resolved at download time.
-_DEFAULT_MODEL = "juliozhao/DocLayout-YOLO-DocStructBench"
+_DEFAULT_MODEL = "collab-dr/DocLayout-YOLO-DocStructBench"
 _MODEL_FILENAME = "doclayout_yolo_docstructbench_imgsz1024.pt"
 
 _model_instance: YOLOv10 | None = None
