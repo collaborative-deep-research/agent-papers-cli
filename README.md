@@ -216,7 +216,7 @@ paper goto 2302.13971 t2    # table 2
 paper goto 2302.13971 eq3   # equation 3
 ```
 
-Detection uses [DocLayout-YOLO](https://github.com/opendatalab/DocLayout-YOLO) trained on DocStructBench (10 categories including figures, tables, and formulas). Supports CUDA, MPS (Apple Silicon), and CPU. Running `paper figures` etc. triggers detection lazily on first use — subsequent calls use the cached result.
+Detection uses [DocLayout-YOLO](https://github.com/opendatalab/DocLayout-YOLO) trained on DocStructBench (10 categories including figures, tables, and formulas). Model weights are from our [pinned fork](https://huggingface.co/collab-dr/DocLayout-YOLO-DocStructBench). Supports CUDA, MPS (Apple Silicon), and CPU. Running `paper figures` etc. triggers detection lazily on first use — subsequent calls use the cached result. Each detected element is cropped as a PNG screenshot to `~/.papers/<id>/layout/` (e.g., `f1.png`, `t2.png`, `eq3.png`).
 
 ## Architecture
 
@@ -259,7 +259,7 @@ Simplified flat-layer approach inspired by [papermage](https://github.com/allena
 - **Document** has a `raw_text` string, list of `Section`s, `Link`s, and `LayoutElement`s
 - Each **Section** has a heading, level, content, and list of `Sentence`s
 - Each **Link** has a kind (`external`/`internal`/`citation`), anchor text, URL, and page
-- **LayoutElement** stores a detected figure, table, or equation with bounding `Box`, confidence, caption, and label
+- **LayoutElement** stores a detected figure, table, or equation with bounding `Box`, confidence, caption, label, and `image_path` (cropped PNG)
 - **Highlight** stores persisted highlights with page, bounding rects (absolute PDF coords), color, and note
 - **Span** objects store character offsets into `raw_text`, enabling text-to-PDF coordinate mapping
 - Everything serializes to JSON for caching
