@@ -5,7 +5,7 @@ argument-hint: [topic]
 allowed-tools: Bash, Read, Glob, Grep, Write
 ---
 
-Conduct a systematic literature review on "$ARGUMENTS" using the `paper` and `search` CLI tools.
+Conduct a systematic literature review on "$ARGUMENTS" using the `paper` and `paper-search` CLI tools.
 
 ## 1. Define Scope
 
@@ -19,10 +19,10 @@ Before searching, clarify with the user:
 
 Search with multiple query variations to maximize coverage:
 ```
-search semanticscholar papers "<main query>" --limit 20 --year <range>
-search semanticscholar papers "<synonym query>" --limit 20 --year <range>
-search semanticscholar papers "<related query>" --limit 20 --year <range>
-search google scholar "<topic>"
+paper-search semanticscholar papers "<main query>" --limit 20 --year <range>
+paper-search semanticscholar papers "<synonym query>" --limit 20 --year <range>
+paper-search semanticscholar papers "<related query>" --limit 20 --year <range>
+paper-search google scholar "<topic>"
 ```
 
 Deduplicate results by title/paper ID.
@@ -31,7 +31,7 @@ Deduplicate results by title/paper ID.
 
 For each unique paper found:
 ```
-search semanticscholar details <paper_id>
+paper-search semanticscholar details <paper_id>
 paper skim <arxiv_id> --lines 2
 ```
 
@@ -54,8 +54,8 @@ Take structured notes on each paper: problem, method, key results, limitations.
 
 For seminal papers, find related work:
 ```
-search semanticscholar citations <paper_id> --limit 20
-search semanticscholar references <paper_id> --limit 20
+paper-search semanticscholar citations <paper_id> --limit 20
+paper-search semanticscholar references <paper_id> --limit 20
 ```
 
 Add any important papers discovered this way back to the triage step.

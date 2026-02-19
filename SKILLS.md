@@ -25,7 +25,7 @@ This repo includes Claude Code skills for agent-driven research workflows. Each 
 
 ## Required Tools
 
-These skills use the `paper` and `search` CLI tools. Install with:
+These skills use the `paper` and `paper-search` CLI tools. Install with:
 
 ```bash
 uv pip install -e .
@@ -33,11 +33,11 @@ uv pip install -e .
 
 ### API Keys
 
-Run `search env` to check which keys are configured. Save keys persistently with:
+Run `paper-search env` to check which keys are configured. Save keys persistently with:
 ```
-search env set SERPER_API_KEY <key>   # required for search google, search browse --backend serper
-search env set S2_API_KEY <key>       # optional, recommended for search semanticscholar (higher rate limits)
-search env set JINA_API_KEY <key>     # required for search browse --backend jina
+paper-search env set SERPER_API_KEY <key>   # required for paper-search google, paper-search browse --backend serper
+paper-search env set S2_API_KEY <key>       # optional, recommended for paper-search semanticscholar (higher rate limits)
+paper-search env set JINA_API_KEY <key>     # required for paper-search browse --backend jina
 ```
 Keys are stored in `~/.papers/.env` and loaded automatically.
 
@@ -54,25 +54,25 @@ paper goto <ref> <ref_id>              # Jump to ref (s3, e1, c5)
 ```
 `<ref>` accepts: `2302.13971`, `arxiv.org/abs/2302.13971`, `arxiv.org/pdf/2302.13971`
 
-### `search` — Search the web and literature
+### `paper-search` — Search the web and literature
 ```
-search env                             # Check API key status
-search env set KEY value               # Save a key to ~/.papers/.env
+paper-search env                             # Check API key status
+paper-search env set KEY value               # Save a key to ~/.papers/.env
 
-search google web "query"              # Google web search (Serper)
-search google scholar "query"          # Google Scholar search (Serper)
+paper-search google web "query"              # Google web search (Serper)
+paper-search google scholar "query"          # Google Scholar search (Serper)
 
-search semanticscholar papers "query"  # Academic paper search
+paper-search semanticscholar papers "query"  # Academic paper search
   [--year 2023-2025] [--min-citations 10] [--venue ACL] [--sort citationCount:desc] [--limit N]
-search semanticscholar snippets "query"  # Text snippet search
+paper-search semanticscholar snippets "query"  # Text snippet search
   [--year 2024] [--paper-ids id1,id2]
-search semanticscholar citations <id>  # Papers citing this one
-search semanticscholar references <id> # Papers this one references
-search semanticscholar details <id>    # Full paper metadata
+paper-search semanticscholar citations <id>  # Papers citing this one
+paper-search semanticscholar references <id> # Papers this one references
+paper-search semanticscholar details <id>    # Full paper metadata
 
-search pubmed "query"                  # PubMed biomedical search
+paper-search pubmed "query"                  # PubMed biomedical search
   [--limit N] [--offset N]
 
-search browse <url>                    # Extract webpage content
+paper-search browse <url>                    # Extract webpage content
   [--backend jina|serper] [--timeout 30]
 ```
