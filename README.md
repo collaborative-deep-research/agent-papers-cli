@@ -22,6 +22,12 @@ paper skim <ref> --lines N --level L   # Headings + first N sentences
 paper search <ref> "query"             # Keyword search with context
 paper info <ref>                       # Show metadata
 paper goto <ref> <ref_id>              # Jump to a section, link, or citation
+
+# Highlights
+paper highlight search <ref> "query"   # Search PDF for text (with coordinates)
+paper highlight add <ref> "query"      # Find text and persist a highlight
+paper highlight list <ref>             # List stored highlights
+paper highlight remove <ref> <id>      # Remove a highlight by ID
 ```
 
 `<ref>` accepts: `2302.13971`, `arxiv.org/abs/2302.13971`, `arxiv.org/pdf/2302.13971`
@@ -150,16 +156,43 @@ paper search 2302.13971 "transformer"
 paper outline 2302.13971 --no-refs
 ```
 
+### Highlight text in a paper
+
+```bash
+# Search for text (shows matches with page numbers and coordinates)
+paper highlight search 2501.12948 "reinforcement learning"
+
+# Add a highlight (single match is saved directly)
+paper highlight add 2501.12948 "reinforcement learning" --color green --note "key concept"
+
+# Multiple matches? Shows a numbered list — use --pick to select
+paper highlight add 2501.12948 "model" --pick 3
+
+# Or use --interactive for a prompt, --range to paginate
+paper highlight add 2501.12948 "model" --interactive
+paper highlight add 2501.12948 "model" --range 21:40
+
+# Output app-compatible JSON (ScaledPosition format, 0-1 normalized)
+paper highlight add 2501.12948 "reinforcement learning" --return-json
+
+# List and manage highlights
+paper highlight list 2501.12948
+paper highlight remove 2501.12948 1
+```
+
+Highlights are stored in `~/.papers/<id>/highlights.json` and optionally annotated onto `paper_annotated.pdf`.
+
 ## Architecture
 
 ```
 src/paper/                         # paper CLI
-├── cli.py        # Click CLI — all commands defined here
-├── fetcher.py    # Downloads PDFs from arxiv, manages cache
-├── parser.py     # PDF → Document: text extraction, heading detection, sentence splitting
-├── models.py     # Data models: Document, Section, Sentence, Span, Box, Metadata, Link
-├── renderer.py   # Rich terminal output, ref registry, goto rendering
-└── storage.py    # ~/.papers/ cache directory management
+├── cli.py         # Click CLI — all commands defined here
+├── fetcher.py     # Downloads PDFs from arxiv, manages cache
+├── highlighter.py # PDF text search, coordinate conversion, highlight CRUD, PDF annotation
+├── models.py      # Data models: Document, Section, Sentence, Span, Box, Metadata, Link, Highlight
+├── parser.py      # PDF → Document: text extraction, heading detection, sentence splitting
+├── renderer.py    # Rich terminal output, ref registry, goto rendering
+└── storage.py     # ~/.papers/ cache directory management
 
 src/search/                        # search CLI
 ├── cli.py        # Click CLI — all commands and subgroups
@@ -188,6 +221,7 @@ Simplified flat-layer approach inspired by [papermage](https://github.com/allena
 - **Document** has a `raw_text` string, list of `Section`s, and list of `Link`s
 - Each **Section** has a heading, level, content, and list of `Sentence`s
 - Each **Link** has a kind (`external`/`internal`/`citation`), anchor text, URL, and page
+- **Highlight** stores persisted highlights with page, bounding rects (absolute PDF coords), color, and note
 - **Span** objects store character offsets into `raw_text`, enabling text-to-PDF coordinate mapping
 - Everything serializes to JSON for caching
 
@@ -230,6 +264,7 @@ paper search 2302.13971 "transformer"
 paper goto 2302.13971 s2            # jump to section
 paper goto 2502.13811 e1            # jump to external link
 paper outline 2302.13971 --no-refs  # clean output without refs
+paper highlight search 2501.12948 "reinforcement learning"  # highlight search
 ```
 
 ### Environment variables
@@ -265,7 +300,6 @@ This repo includes Claude Code skills for agent-driven research workflows. See [
 ## Future plans
 
 - [GROBID](https://github.com/kermitt2/grobid) backend for ML-based section detection
-- `paper annotate` command for highlighting text in PDFs
 - Figure/table refs (`[ref=f...]`) — needs caption detection logic
 - Named citation detection for non-hyperlinked author-year citations (hyperlinked ones already work via `LINK_NAMED`)
 - Richer document model inspired by [papermage](https://github.com/allenai/papermage)

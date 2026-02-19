@@ -5,10 +5,10 @@ Two CLI tools in one repo: `paper` (read academic PDFs) and `search` (web + acad
 ## Quick reference
 
 - **Entry points**: `paper = paper.cli:cli`, `search = search.cli:cli` (Click)
-- **paper modules**: `cli.py`, `parser.py`, `fetcher.py`, `storage.py`, `renderer.py`, `models.py`
+- **paper modules**: `cli.py`, `parser.py`, `fetcher.py`, `storage.py`, `renderer.py`, `models.py`, `highlighter.py`
 - **search modules**: `cli.py`, `config.py`, `models.py`, `renderer.py`, `backends/{google,semanticscholar,pubmed,browse}.py`
-- **Cache**: `~/.papers/<arxiv_id>/` (papers), `~/.papers/.env` (persistent API keys)
-- **Tests**: `pytest` — paper tests in `tests/` (110 tests), search tests in `tests/search/` (69 tests)
+- **Cache**: `~/.papers/<arxiv_id>/` (papers: `paper.pdf`, `parsed.json`, `metadata.json`, `highlights.json`, `paper_annotated.pdf`), `~/.papers/.env` (persistent API keys)
+- **Tests**: `pytest` — paper tests in `tests/` (124 tests), search tests in `tests/search/` (69 tests)
 - **Agent skills**: `.claude/skills/` — research-coordinator, deep-research, literature-review, fact-check
 
 ## Architecture notes
