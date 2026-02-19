@@ -11,7 +11,7 @@ from rich.panel import Panel
 from rich.text import Text
 from rich.tree import Tree
 
-from paper.models import Document, Highlight, Link, Section
+from paper.models import Document, Highlight, LayoutElement, Link, Section
 from paper import storage
 
 console = Console()
@@ -20,17 +20,17 @@ console = Console()
 @dataclass
 class RefEntry:
     """A navigable reference shown in output."""
-    ref_id: str    # "s3", "e1", "c5"
-    kind: str      # "section", "external", "citation"
+    ref_id: str    # "s3", "e1", "c5", "f1", "t1", "eq1"
+    kind: str      # "section", "external", "citation", "figure", "table", "equation"
     label: str     # display label
-    target: str    # section heading / URL / citation text
+    target: str    # section heading / URL / citation text / element label
 
 
-# TODO(v2): Figure/table refs [ref=f...] — needs caption detection
 def build_ref_registry(doc: Document) -> list[RefEntry]:
     """Build the ref registry for a document.
 
-    Order: s1..sN (sections), e1..eN (external links), c1..cN (citations).
+    Order: s1..sN (sections), f1..fN (figures), t1..tN (tables),
+    eq1..eqN (equations), e1..eN (external links), c1..cN (citations).
     """
     registry: list[RefEntry] = []
 
@@ -41,6 +41,20 @@ def build_ref_registry(doc: Document) -> list[RefEntry]:
             kind="section",
             label=section.heading,
             target=section.heading,
+        ))
+
+    # Layout elements: figures, tables, equations
+    _REF_PREFIX = {"figure": "f", "table": "t", "equation": "eq"}
+    counters: dict[str, int] = {"figure": 0, "table": 0, "equation": 0}
+    for elem in doc.layout_elements:
+        counters[elem.kind] += 1
+        prefix = _REF_PREFIX[elem.kind]
+        ref_id = f"{prefix}{counters[elem.kind]}"
+        registry.append(RefEntry(
+            ref_id=ref_id,
+            kind=elem.kind,
+            label=elem.label or f"{elem.kind.title()} {counters[elem.kind]}",
+            target=elem.label,
         ))
 
     # External links (unique URLs, in order of first appearance)
@@ -91,12 +105,21 @@ def _section_ref_map(registry: list[RefEntry]) -> dict[str, str]:
 def _ref_summary(registry: list[RefEntry]) -> str:
     """Build a compact ref summary line."""
     sections = [e for e in registry if e.kind == "section"]
+    figures = [e for e in registry if e.kind == "figure"]
+    tables = [e for e in registry if e.kind == "table"]
+    equations = [e for e in registry if e.kind == "equation"]
     externals = [e for e in registry if e.kind == "external"]
     citations = [e for e in registry if e.kind == "citation"]
 
     parts = []
     if sections:
         parts.append(f"s1..s{len(sections)} (sections)")
+    if figures:
+        parts.append(f"f1..f{len(figures)} (figures)")
+    if tables:
+        parts.append(f"t1..t{len(tables)} (tables)")
+    if equations:
+        parts.append(f"eq1..eq{len(equations)} (equations)")
     if externals:
         parts.append(f"e1..e{len(externals)} (links)")
     if citations:
@@ -796,4 +819,67 @@ def render_goto(doc: Document, ref_id: str) -> bool:
         console.print()
         return True
 
+    elif entry.kind in ("figure", "table", "equation"):
+        # Find matching layout element
+        for elem in doc.layout_elements:
+            if elem.label == entry.target:
+                render_header(doc)
+                _render_layout_element(elem, entry.ref_id)
+                return True
+        console.print(f"[red]Layout element not found: {entry.target}[/red]")
+        return False
+
     return False
+
+
+def _render_layout_element(elem: LayoutElement, ref_id: str) -> None:
+    """Render a single layout element (figure, table, or equation)."""
+    kind_style = {"figure": "green", "table": "blue", "equation": "magenta"}
+    style = kind_style.get(elem.kind, "white")
+
+    console.print(f"  [bold {style}]{elem.label}[/bold {style}] {_ref_tag(ref_id)}")
+    console.print(f"  [dim]Page {elem.box.page + 1} · "
+                  f"bbox ({elem.box.x0:.0f}, {elem.box.y0:.0f}, {elem.box.x1:.0f}, {elem.box.y1:.0f}) · "
+                  f"conf {elem.confidence:.0%}[/dim]")
+    if elem.image_path:
+        console.print(f"  [dim]Image:[/dim] {elem.image_path}")
+    if elem.caption:
+        console.print(f"  {elem.caption}")
+    console.print()
+
+
+def render_layout_list(
+    doc: Document, kind: str | None = None
+) -> None:
+    """List detected layout elements (figures, tables, equations).
+
+    If kind is None, show all; otherwise filter to that kind.
+    """
+    render_header(doc)
+
+    registry = build_ref_registry(doc)
+    elements = doc.layout_elements
+    if kind:
+        elements = [e for e in elements if e.kind == kind]
+
+    if not elements:
+        label = kind or "layout element"
+        console.print(f"  [dim]No {label}s detected.[/dim]")
+        console.print(f"  [dim]Run: paper detect <id> to trigger layout detection.[/dim]")
+        console.print()
+        return
+
+    ref_map: dict[str, str] = {}
+    for entry in registry:
+        if entry.kind in ("figure", "table", "equation"):
+            ref_map[entry.target] = entry.ref_id
+
+    for elem in elements:
+        ref_id = ref_map.get(elem.label, "")
+        _render_layout_element(elem, ref_id)
+
+    kind_label = kind or "element"
+    console.print(f"  [dim]{len(elements)} {kind_label}(s) detected[/dim]")
+    console.print()
+
+    _print_ref_footer(registry, doc.metadata.arxiv_id)

@@ -14,6 +14,7 @@ from paper.renderer import (
     render_header,
     render_highlight_list,
     render_highlight_matches,
+    render_layout_list,
     render_outline,
     render_search_results,
     render_section,
@@ -211,16 +212,136 @@ def goto(reference: str, ref_id: str):
     """Jump to a reference shown in paper output.
 
     REFERENCE: arxiv ID or URL (e.g., 2301.12345)
-    REF_ID: a reference like s3, e1, c5
+    REF_ID: a reference like s3, e1, c5, f1, t2, eq3
     """
     try:
-        doc = _load(reference)
+        # For layout refs (f/t/eq), load with layout detection
+        if ref_id.startswith(("f", "t", "eq")):
+            doc, _, _ = _load_with_layout(reference)
+        else:
+            doc = _load(reference)
+    except ImportError as e:
+        console.print(f"[red]{e}[/red]")
+        raise SystemExit(1)
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")
         raise SystemExit(1)
 
     if not render_goto(doc, ref_id):
         raise SystemExit(1)
+
+
+# --- Layout detection commands ---
+
+def _load_with_layout(reference: str):
+    """Fetch + parse + detect layout, returning (Document, arxiv_id, pdf_path).
+
+    Layout detection is lazy: runs on first call, then cached.
+    """
+    from paper.layout import detect_layout
+
+    arxiv_id, pdf_path = fetch_paper(reference)
+    doc = parse_paper(arxiv_id, pdf_path)
+
+    if not doc.layout_elements:
+        doc.layout_elements = detect_layout(arxiv_id, pdf_path)
+
+    return doc, arxiv_id, pdf_path
+
+
+@cli.command()
+@click.argument("reference")
+@click.option("--force", is_flag=True, default=False, help="Re-run detection even if cached.")
+def detect(reference: str, force: bool):
+    """Run layout detection (figures, tables, equations) on a paper.
+
+    REFERENCE: arxiv ID or URL (e.g., 2301.12345)
+
+    Detection results are cached. Use --force to re-detect.
+    """
+    from paper.layout import detect_layout
+
+    try:
+        arxiv_id, pdf_path = fetch_paper(reference)
+        doc = parse_paper(arxiv_id, pdf_path)
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise SystemExit(1)
+
+    console.print("[dim]Running layout detection...[/dim]")
+    elements = detect_layout(arxiv_id, pdf_path, force=force)
+    doc.layout_elements = elements
+
+    render_header(doc)
+    figs = sum(1 for e in elements if e.kind == "figure")
+    tabs = sum(1 for e in elements if e.kind == "table")
+    eqs = sum(1 for e in elements if e.kind == "equation")
+    console.print(f"  Detected: {figs} figure(s), {tabs} table(s), {eqs} equation(s)")
+    console.print(f"  [dim]Cached to ~/.papers/{arxiv_id}/layout.json[/dim]")
+    console.print()
+
+
+@cli.command()
+@click.argument("reference")
+def figures(reference: str):
+    """List detected figures in a paper.
+
+    REFERENCE: arxiv ID or URL (e.g., 2301.12345)
+
+    Triggers layout detection on first use (cached afterward).
+    """
+    try:
+        doc, _, _ = _load_with_layout(reference)
+    except ImportError as e:
+        console.print(f"[red]{e}[/red]")
+        raise SystemExit(1)
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise SystemExit(1)
+
+    render_layout_list(doc, kind="figure")
+
+
+@cli.command()
+@click.argument("reference")
+def tables(reference: str):
+    """List detected tables in a paper.
+
+    REFERENCE: arxiv ID or URL (e.g., 2301.12345)
+
+    Triggers layout detection on first use (cached afterward).
+    """
+    try:
+        doc, _, _ = _load_with_layout(reference)
+    except ImportError as e:
+        console.print(f"[red]{e}[/red]")
+        raise SystemExit(1)
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise SystemExit(1)
+
+    render_layout_list(doc, kind="table")
+
+
+@cli.command()
+@click.argument("reference")
+def equations(reference: str):
+    """List detected equations in a paper.
+
+    REFERENCE: arxiv ID or URL (e.g., 2301.12345)
+
+    Triggers layout detection on first use (cached afterward).
+    """
+    try:
+        doc, _, _ = _load_with_layout(reference)
+    except ImportError as e:
+        console.print(f"[red]{e}[/red]")
+        raise SystemExit(1)
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise SystemExit(1)
+
+    render_layout_list(doc, kind="equation")
 
 
 # --- Highlight helpers ---
