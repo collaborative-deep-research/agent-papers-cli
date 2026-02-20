@@ -4,8 +4,9 @@
   "private": true,
   "scripts": {
     "start": "npx remotion studio",
-    "build": "npx remotion render src/index.ts DemoVideo out/demo.mp4",
-    "build:gif": "npx remotion render src/index.ts DemoVideo out/demo.gif --image-format=png",
+    "build": "npx remotion render src/index.ts DemoVideo out/demo-1080p.mp4",
+    "build:720p": "npx remotion render src/index.ts DemoVideo720p out/demo-720p.mp4",
+    "build:all": "npm run build && npm run build:720p",
     "skills": "npx remotion skills add"
   },
   "dependencies": {

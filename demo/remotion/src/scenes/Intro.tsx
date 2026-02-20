@@ -4,10 +4,11 @@ export const Intro: React.FC = () => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  const titleOpacity = interpolate(frame, [0, 20], [0, 1], { extrapolateRight: "clamp" });
-  const titleY = spring({ frame, fps, config: { damping: 20 } }) * -20;
+  // Title visible from frame 0 so GitHub thumbnail isn't blank
+  const titleOpacity = interpolate(frame, [0, 8], [0.85, 1], { extrapolateRight: "clamp" });
+  const titleY = spring({ frame, fps, config: { damping: 20 } }) * -12;
 
-  const taglineOpacity = interpolate(frame, [30, 50], [0, 1], { extrapolateRight: "clamp" });
+  const taglineOpacity = interpolate(frame, [15, 35], [0, 1], { extrapolateRight: "clamp" });
 
   return (
     <AbsoluteFill

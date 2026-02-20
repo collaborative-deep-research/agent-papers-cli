@@ -6,6 +6,7 @@ import {
 } from "remotion";
 import { Intro } from "./scenes/Intro";
 import { SceneLabel } from "./components/SceneLabel";
+import { SceneBanner } from "./components/SceneBanner";
 import { ProgressBar } from "./components/ProgressBar";
 import { TerminalWindow } from "./components/TerminalWindow";
 import { Transition } from "./scenes/Transition";
@@ -29,6 +30,9 @@ export const DEMO_HEIGHT = 1080;
  *   77-82  Outro — install command + GitHub
  *
  * Total: ~82s
+ *
+ * Each scene starts with a centered banner (~1.8s) that dissolves
+ * into the terminal recording.
  */
 export const DemoVideo: React.FC = () => {
   const s = (sec: number) => sec * DEMO_FPS;
@@ -50,14 +54,25 @@ export const DemoVideo: React.FC = () => {
             />
           </TerminalWindow>
 
-          {/* Scene labels overlay */}
-          <Sequence from={0} durationInFrames={s(11)}>
+          {/* Scene banners (centered, dissolve) */}
+          <Sequence from={0} durationInFrames={54}>
+            <SceneBanner step={1} text="Navigate a paper" />
+          </Sequence>
+          <Sequence from={s(11)} durationInFrames={54}>
+            <SceneBanner step={2} text="Search within a paper" />
+          </Sequence>
+          <Sequence from={s(21)} durationInFrames={54}>
+            <SceneBanner step={3} text="Search the literature" />
+          </Sequence>
+
+          {/* Persistent scene labels (bottom-right, after banner dissolves) */}
+          <Sequence from={54} durationInFrames={s(11) - 54}>
             <SceneLabel step={1} text="Navigate a paper" />
           </Sequence>
-          <Sequence from={s(11)} durationInFrames={s(10)}>
+          <Sequence from={s(11) + 54} durationInFrames={s(10) - 54}>
             <SceneLabel step={2} text="Search within a paper" />
           </Sequence>
-          <Sequence from={s(21)} durationInFrames={s(17)}>
+          <Sequence from={s(21) + 54} durationInFrames={s(17) - 54}>
             <SceneLabel step={3} text="Search the literature" />
           </Sequence>
         </AbsoluteFill>
@@ -78,7 +93,13 @@ export const DemoVideo: React.FC = () => {
             />
           </TerminalWindow>
 
-          <Sequence from={0} durationInFrames={s(32)}>
+          {/* Scene banner */}
+          <Sequence from={0} durationInFrames={54}>
+            <SceneBanner step={4} text="Deep research with Claude Code" />
+          </Sequence>
+
+          {/* Persistent label (after banner dissolves) */}
+          <Sequence from={54} durationInFrames={s(32) - 54}>
             <SceneLabel step={4} text="Deep research with Claude Code" />
           </Sequence>
         </AbsoluteFill>
