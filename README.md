@@ -20,6 +20,8 @@ pip install agent-papers-cli[layout]
 
 Requires Python 3.10+. Also works with `uv pip install agent-papers-cli`.
 
+To install the [agent skills](#agent-skills) for Claude Code: `npx skills add collaborative-deep-research/agent-papers-cli`
+
 ## `paper` commands
 
 ```bash
