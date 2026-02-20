@@ -1,6 +1,10 @@
-# paper & paper-search
+# agent-papers-cli
 
-CLI tools for reading academic papers and searching the web, academic literature, and biomedical databases from the terminal.
+Read academic papers, search the literature, and run multi-step research workflows — all from the terminal.
+
+**agent-papers-cli** gives your AI agents (and you) the ability to read academic papers, search Google, Google Scholar, Semantic Scholar, PubMed, and browse webpages — all from the command line. Two CLI tools work together: `paper` for reading and navigating PDFs, and `paper-search` for querying search engines and academic databases.
+
+Designed as building blocks for agentic research workflows, these tools let agents autonomously discover papers, read them in depth, follow citation graphs, and verify claims. The repo includes four [Claude Code skills](#agent-skills) that orchestrate multi-step research tasks like deep-dive investigations, systematic literature reviews, and fact-checking.
 
 - **`paper`** — read, skim, and search PDFs. Inspired by [agent-browser](https://github.com/vercel-labs/agent-browser) — but for PDFs.
 - **`paper-search`** — search Google, Google Scholar, Semantic Scholar, PubMed, and extract webpage content. Based on the search APIs from [dr-tulu](https://github.com/rlresearch/dr-tulu).
@@ -324,7 +328,13 @@ Search API keys can be set via shell env, `.env` in the working directory, or pe
 
 ## Agent Skills
 
-This repo includes Claude Code skills for agent-driven research workflows. See [SKILLS.md](SKILLS.md) for details.
+This repo includes [Claude Code skills](https://agentskills.io) for agent-driven research workflows. Install them into any project with:
+
+```bash
+npx skills add collaborative-deep-research/agent-papers-cli
+```
+
+Or see [SKILLS.md](SKILLS.md) for manual setup and details.
 
 | Skill | Command | Description |
 |-------|---------|-------------|
