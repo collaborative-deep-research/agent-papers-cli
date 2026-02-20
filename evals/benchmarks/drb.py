@@ -13,7 +13,7 @@ import re
 from typing import Any
 
 from ..common import map_with_progress
-from ..sampler import AnthropicToolSampler
+from ..sampler import ClaudeCodeSampler
 from ..types import SingleEvalResult
 from .base import Eval
 
@@ -160,7 +160,7 @@ class DRBEval(Eval):
         self.n_threads = n_threads
         self.output_dir = output_dir
 
-    def generate(self, sampler: AnthropicToolSampler) -> list[dict[str, Any]]:
+    def generate(self, sampler: ClaudeCodeSampler) -> list[dict[str, Any]]:
         """Generate research reports for each DRB query."""
 
         def generate_single(item: dict[str, Any]) -> dict[str, Any]:

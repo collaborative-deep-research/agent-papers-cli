@@ -13,7 +13,7 @@ import re
 from typing import Any
 
 from ..common import map_with_progress, save_checkpoint
-from ..sampler import AnthropicToolSampler
+from ..sampler import ClaudeCodeSampler
 from ..types import SingleEvalResult
 from .base import Eval
 
@@ -154,7 +154,7 @@ class SQAEval(Eval):
         self.n_threads = n_threads
         self.output_dir = output_dir
 
-    def generate(self, sampler: AnthropicToolSampler) -> list[dict[str, Any]]:
+    def generate(self, sampler: ClaudeCodeSampler) -> list[dict[str, Any]]:
         """Generate responses for each SQA question."""
 
         def generate_single(item: dict[str, Any]) -> dict[str, Any]:

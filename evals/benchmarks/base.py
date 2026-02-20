@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 from ..common import aggregate_results
-from ..sampler import AnthropicToolSampler
+from ..sampler import ClaudeCodeSampler
 from ..types import EvalResult, SingleEvalResult
 
 
@@ -17,7 +17,7 @@ class Eval(ABC):
     """Abstract base class for an evaluation benchmark."""
 
     @abstractmethod
-    def generate(self, sampler: AnthropicToolSampler) -> list[dict[str, Any]]:
+    def generate(self, sampler: ClaudeCodeSampler) -> list[dict[str, Any]]:
         """Generate responses for every example. Returns raw generation data."""
         ...
 
@@ -26,7 +26,7 @@ class Eval(ABC):
         """Score a list of generated outputs."""
         ...
 
-    def __call__(self, sampler: AnthropicToolSampler) -> EvalResult:
+    def __call__(self, sampler: ClaudeCodeSampler) -> EvalResult:
         """Run end-to-end: generate, evaluate, aggregate."""
         gen_data = self.generate(sampler)
         results = self.evaluate(gen_data)

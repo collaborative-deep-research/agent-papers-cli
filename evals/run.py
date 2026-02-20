@@ -76,12 +76,50 @@ def _get_benchmark(name: str, args: argparse.Namespace) -> Any:
         sys.exit(1)
 
 
-def _make_sampler(args: argparse.Namespace):
-    from .sampler import AnthropicToolSampler
-    return AnthropicToolSampler(
-        model=getattr(args, "model", "claude-sonnet-4-20250514"),
-        max_turns=getattr(args, "max_turns", 15),
+def _build_system_prompt(args: argparse.Namespace) -> str | None:
+    """Build a system prompt, optionally prepending a skill."""
+    skill = getattr(args, "skill", None)
+    if not skill:
+        return None  # Use default from ClaudeCodeSampler
+
+    # Load the skill SKILL.md and use it as the system prompt
+    skill_path = os.path.join(
+        os.path.dirname(__file__), os.pardir,
+        ".claude", "skills", skill, "SKILL.md",
     )
+    skill_path = os.path.normpath(skill_path)
+    if not os.path.exists(skill_path):
+        print(f"Error: skill not found: {skill_path}", file=sys.stderr)
+        sys.exit(1)
+
+    with open(skill_path) as f:
+        content = f.read()
+
+    # Strip YAML front matter
+    if content.startswith("---"):
+        end = content.find("---", 3)
+        if end != -1:
+            content = content[end + 3:].strip()
+
+    return content
+
+
+def _make_sampler(args: argparse.Namespace):
+    from .sampler import ClaudeCodeSampler
+
+    system_prompt = _build_system_prompt(args)
+    kwargs: dict[str, Any] = {
+        "model": getattr(args, "model", "sonnet"),
+        "max_turns": getattr(args, "max_turns", 15),
+    }
+    if system_prompt is not None:
+        kwargs["system_prompt"] = system_prompt
+
+    budget = getattr(args, "max_budget_usd", None)
+    if budget is not None:
+        kwargs["max_budget_usd"] = budget
+
+    return ClaudeCodeSampler(**kwargs)
 
 
 def cmd_generate(args: argparse.Namespace) -> None:
@@ -189,7 +227,7 @@ def cmd_run(args: argparse.Namespace) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="python -m evals.run",
-        description="Evaluation harness for paper/paper-search CLI tools",
+        description="Evaluation harness for paper/paper-search CLI tools (uses Claude Code)",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -203,15 +241,26 @@ def main() -> None:
     common.add_argument("--num-examples", "-n", type=int, default=None)
     common.add_argument("--threads", type=int, default=10)
     common.add_argument("--output-dir", default=RESULTS_DIR)
-    common.add_argument("--data-path", default=None, help="Path to dataset file (required for sqa/drb).")
-    common.add_argument("--subset", default="all", choices=["all", "hard", "consensus"],
+    common.add_argument("--data-path", default=None,
+                        help="Path to dataset file (required for sqa/drb).")
+    common.add_argument("--subset", default="all",
+                        choices=["all", "hard", "consensus"],
                         help="HealthBench subset.")
     common.add_argument("--grader-model", default="gpt-4.1-mini")
 
-    # Model arguments
+    # Claude Code arguments
     model_args = argparse.ArgumentParser(add_help=False)
-    model_args.add_argument("--model", "-m", default="claude-sonnet-4-20250514")
-    model_args.add_argument("--max-turns", type=int, default=15)
+    model_args.add_argument("--model", "-m", default="sonnet",
+                            help="Claude model alias or full name (default: sonnet).")
+    model_args.add_argument("--max-turns", type=int, default=15,
+                            help="Max agentic turns per example.")
+    model_args.add_argument("--max-budget-usd", type=float, default=None,
+                            help="Max dollar spend per example.")
+    model_args.add_argument(
+        "--skill", "-s", default=None,
+        choices=["deep-research", "literature-review", "fact-check", "research-coordinator"],
+        help="Skill to use as system prompt (default: generic research prompt).",
+    )
 
     # generate
     gen_parser = sub.add_parser("generate", parents=[common, model_args],

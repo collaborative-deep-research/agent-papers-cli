@@ -1,151 +1,170 @@
-"""Anthropic API sampler with tool-use loop.
+"""Claude Code sampler — runs ``claude -p`` for each eval prompt.
 
-Sends messages to Claude, executes tool calls via our CLI tools, and
-loops until Claude produces a final text response or we hit max_turns.
+Spawns the ``claude`` CLI in print mode with JSON output, letting Claude Code
+use its full tool set (Bash, Read, Write, WebSearch, etc.) to call
+``paper`` and ``paper-search`` commands.  The project's CLAUDE.md is
+automatically loaded, giving Claude knowledge of the available CLI tools.
 """
 
 from __future__ import annotations
 
+import json
 import logging
+import os
+import subprocess
+from pathlib import Path
 from typing import Any
 
-import anthropic
-
-from .tools import ALL_TOOLS, execute_tool
 from .types import MessageList, SamplerResponse
 
 logger = logging.getLogger(__name__)
 
+# Resolve the project root (where CLAUDE.md lives) so that `claude -p` picks
+# it up regardless of where the eval runner is invoked from.
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
 DEFAULT_SYSTEM_PROMPT = """\
-You are a research assistant with access to tools for reading academic papers \
-and searching the web and academic databases.
+You are being evaluated on your ability to answer research questions.
 
-Use the available tools to thoroughly answer the user's question. You can:
-- Search for relevant papers using web_search, scholar_search, academic_search, \
-snippet_search, or pubmed_search
-- Browse specific URLs with browse_url
-- Read papers with paper_read, paper_outline, paper_skim, paper_search, paper_info
-- Navigate paper references with paper_goto
-
-When answering research questions:
-1. Search for relevant sources first
-2. Read and analyze the most promising papers
-3. Synthesize findings into a comprehensive answer with citations
+Use the `paper` and `paper-search` CLI tools (via Bash) to find, read, and \
+synthesize information from academic papers and the web.  Provide a thorough, \
+well-cited answer.  Do NOT create or edit any files — just output your answer.\
 """
 
 
-class AnthropicToolSampler:
-    """Claude API client that executes tool calls in a loop."""
+class ClaudeCodeSampler:
+    """Run ``claude -p`` to generate a response with full tool access."""
 
     def __init__(
         self,
-        model: str = "claude-sonnet-4-20250514",
-        system_prompt: str = DEFAULT_SYSTEM_PROMPT,
-        max_tokens: int = 16384,
+        model: str = "sonnet",
+        system_prompt: str | None = DEFAULT_SYSTEM_PROMPT,
         max_turns: int = 15,
-        tools: list[dict[str, Any]] | None = None,
-        temperature: float = 0.0,
+        max_budget_usd: float | None = None,
+        permission_mode: str = "bypassPermissions",
+        allowed_tools: list[str] | None = None,
+        cwd: str | os.PathLike | None = None,
+        timeout: int = 600,
     ):
-        self.client = anthropic.Anthropic()
         self.model = model
         self.system_prompt = system_prompt
-        self.max_tokens = max_tokens
         self.max_turns = max_turns
-        self.tools = tools or ALL_TOOLS
-        self.temperature = temperature
+        self.max_budget_usd = max_budget_usd
+        self.permission_mode = permission_mode
+        self.allowed_tools = allowed_tools
+        self.cwd = str(cwd or _PROJECT_ROOT)
+        self.timeout = timeout
+
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _format_prompt(message_list: MessageList) -> str:
+        """Convert a message list into a single prompt string for ``-p``."""
+        if len(message_list) == 1:
+            return message_list[0]["content"]
+
+        # Multi-turn (e.g. HealthBench): format conversation, keep the
+        # final user message as the actual prompt.
+        parts: list[str] = []
+        for msg in message_list[:-1]:
+            role = msg["role"].capitalize()
+            parts.append(f"{role}: {msg['content']}")
+        history = "\n\n".join(parts)
+        final = message_list[-1]["content"]
+        return (
+            f"<conversation_history>\n{history}\n</conversation_history>\n\n"
+            f"{final}"
+        )
+
+    # ------------------------------------------------------------------
 
     def __call__(self, message_list: MessageList) -> SamplerResponse:
-        """Run the agentic tool-use loop.
+        prompt = self._format_prompt(message_list)
 
-        *message_list* should be a list of dicts with ``role`` and ``content``
-        keys (the user prompt).  Returns a :class:`SamplerResponse` with the
-        final text and full conversation trace.
-        """
-        messages: MessageList = list(message_list)
-        all_tool_calls: list[dict[str, Any]] = []
-        metadata: dict[str, Any] = {"turns": 0, "model": self.model}
+        cmd: list[str] = [
+            "claude",
+            "-p", prompt,
+            "--output-format", "json",
+            "--model", self.model,
+            "--max-turns", str(self.max_turns),
+            "--no-session-persistence",
+            "--permission-mode", self.permission_mode,
+        ]
 
-        for turn in range(self.max_turns):
-            metadata["turns"] = turn + 1
+        if self.system_prompt:
+            cmd.extend(["--append-system-prompt", self.system_prompt])
+        if self.max_budget_usd is not None:
+            cmd.extend(["--max-budget-usd", str(self.max_budget_usd)])
+        if self.allowed_tools:
+            cmd.extend(["--allowedTools", ",".join(self.allowed_tools)])
 
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=self.max_tokens,
-                system=self.system_prompt,
-                tools=self.tools,
-                messages=messages,
-                temperature=self.temperature,
+        # Strip the CLAUDECODE env var so nested invocation is allowed.
+        env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
+
+        logger.info("Running: claude -p (model=%s, max_turns=%d)", self.model, self.max_turns)
+        logger.debug("Prompt: %s", prompt[:200])
+
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                cwd=self.cwd,
+                env=env,
+                timeout=self.timeout,
+            )
+        except subprocess.TimeoutExpired:
+            logger.error("claude -p timed out after %ds", self.timeout)
+            return SamplerResponse(
+                response_text="[ERROR] claude -p timed out",
+                messages=message_list,
+                metadata={"error": "timeout", "timeout": self.timeout},
             )
 
-            # Accumulate usage
-            if response.usage:
-                metadata.setdefault("input_tokens", 0)
-                metadata.setdefault("output_tokens", 0)
-                metadata["input_tokens"] += response.usage.input_tokens
-                metadata["output_tokens"] += response.usage.output_tokens
+        if result.returncode != 0:
+            stderr = result.stderr.strip()
+            logger.error("claude -p failed (rc=%d): %s", result.returncode, stderr[:500])
+            return SamplerResponse(
+                response_text=f"[ERROR] claude -p exited {result.returncode}: {stderr[:500]}",
+                messages=message_list,
+                metadata={"error": "nonzero_exit", "returncode": result.returncode},
+            )
 
-            # Check if we got any tool_use blocks
-            tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
+        # Parse JSON output
+        try:
+            data = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            logger.error("Failed to parse claude JSON output: %s", result.stdout[:500])
+            return SamplerResponse(
+                response_text=result.stdout.strip() or "[ERROR] empty output",
+                messages=message_list,
+                metadata={"error": "json_parse"},
+            )
 
-            if not tool_use_blocks:
-                # Final text response — extract and return
-                text_parts = [b.text for b in response.content if b.type == "text"]
-                final_text = "\n".join(text_parts)
-                messages.append({"role": "assistant", "content": final_text})
-                return SamplerResponse(
-                    response_text=final_text,
-                    messages=messages,
-                    tool_calls=all_tool_calls,
-                    metadata=metadata,
-                )
+        response_text = data.get("result", "")
+        metadata: dict[str, Any] = {
+            "model": self.model,
+            "num_turns": data.get("num_turns"),
+            "duration_ms": data.get("duration_ms"),
+            "duration_api_ms": data.get("duration_api_ms"),
+            "total_cost_usd": data.get("total_cost_usd"),
+            "session_id": data.get("session_id"),
+            "is_error": data.get("is_error", False),
+            "usage": data.get("usage"),
+            "model_usage": data.get("modelUsage"),
+        }
 
-            # Build assistant message with all content blocks
-            assistant_content: list[dict[str, Any]] = []
-            for block in response.content:
-                if block.type == "text":
-                    assistant_content.append({"type": "text", "text": block.text})
-                elif block.type == "tool_use":
-                    assistant_content.append({
-                        "type": "tool_use",
-                        "id": block.id,
-                        "name": block.name,
-                        "input": block.input,
-                    })
-            messages.append({"role": "assistant", "content": assistant_content})
+        messages = message_list + [{"role": "assistant", "content": response_text}]
 
-            # Execute each tool call and build tool_result blocks
-            tool_results: list[dict[str, Any]] = []
-            for block in tool_use_blocks:
-                logger.info("Tool call: %s(%s)", block.name, block.input)
-                output = execute_tool(block.name, block.input)
-                logger.info("Tool result: %s chars", len(output))
-
-                all_tool_calls.append({
-                    "id": block.id,
-                    "name": block.name,
-                    "input": block.input,
-                    "output": output,
-                })
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
-                    "content": output,
-                })
-
-            messages.append({"role": "user", "content": tool_results})
-
-        # Exhausted max_turns — return whatever we have
-        text_parts = []
-        for block in response.content:
-            if block.type == "text":
-                text_parts.append(block.text)
-        final_text = "\n".join(text_parts) if text_parts else "[max turns reached]"
-        messages.append({"role": "assistant", "content": final_text})
-        metadata["max_turns_reached"] = True
+        logger.info(
+            "Done: %d turns, $%.4f, %d chars",
+            data.get("num_turns", 0),
+            data.get("total_cost_usd", 0),
+            len(response_text),
+        )
 
         return SamplerResponse(
-            response_text=final_text,
+            response_text=response_text,
             messages=messages,
-            tool_calls=all_tool_calls,
             metadata=metadata,
         )

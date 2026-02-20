@@ -14,7 +14,7 @@ from typing import Any
 
 from ..common import map_with_progress, save_checkpoint, load_checkpoint
 from ..graders import grade_coverage
-from ..sampler import AnthropicToolSampler
+from ..sampler import ClaudeCodeSampler
 from ..types import EvalResult, SingleEvalResult
 from .base import Eval
 
@@ -105,7 +105,7 @@ class ResearchQAEval(Eval):
         self.n_threads = n_threads
         self.grader_model = grader_model
 
-    def generate(self, sampler: AnthropicToolSampler) -> list[dict[str, Any]]:
+    def generate(self, sampler: ClaudeCodeSampler) -> list[dict[str, Any]]:
         """Generate responses for all ResearchQA items."""
 
         def generate_single(item: ResearchQAItem) -> dict[str, Any]:
