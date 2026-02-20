@@ -5,9 +5,9 @@ Two CLI tools in one repo: `paper` (read academic PDFs) and `paper-search` (web 
 ## Quick reference
 
 - **Entry points**: `paper = paper.cli:cli`, `paper-search = search.cli:cli` (Click)
-- **paper modules**: `cli.py`, `parser.py`, `fetcher.py`, `storage.py`, `renderer.py`, `models.py`, `highlighter.py`, `layout.py`
+- **paper modules**: `cli.py`, `parser.py`, `fetcher.py`, `storage.py`, `renderer.py`, `models.py`, `highlighter.py`, `layout.py`, `bibtex.py`
 - **search modules**: `cli.py`, `config.py`, `models.py`, `renderer.py`, `backends/{google,semanticscholar,pubmed,browse}.py`
-- **Cache**: `~/.papers/<paper_id>/` (papers: `paper.pdf`, `parsed.json`, `metadata.json`, `highlights.json`, `layout.json`, `layout/*.png`, `paper_annotated.pdf`), `~/.papers/.models/` (YOLO weights), `~/.papers/.env` (persistent API keys), `~/.papers/.last_header` (header auto-suppression state)
+- **Cache**: `~/.papers/<paper_id>/` (papers: `paper.pdf`, `parsed.json`, `metadata.json`, `highlights.json`, `layout.json`, `layout/*.png`, `paper_annotated.pdf`, `bibtex.bib`), `~/.papers/.models/` (YOLO weights), `~/.papers/.env` (persistent API keys), `~/.papers/.last_header` (header auto-suppression state)
 - **Local PDFs**: Pass a file path (e.g., `./paper.pdf`) instead of an arxiv ID — reads directly, no download. Cache uses `{stem}-{hash8}` IDs (SHA-256 of absolute path) to avoid collisions. Stale caches are detected via mtime comparison.
 - **Tests**: `pytest` — paper tests in `tests/` (124 tests), search tests in `tests/search/` (69 tests)
 - **Agent skills**: `.claude/skills/` — research-coordinator, deep-research, literature-review, fact-check
@@ -28,6 +28,7 @@ Two CLI tools in one repo: `paper` (read academic PDFs) and `paper-search` (web 
 
 - **Header auto-suppression**: Consecutive commands on the same paper auto-suppress the title header (5-min TTL). Use `--include-header` to force it, `--no-header` to always suppress. State stored in `~/.papers/.last_header`.
 - **Section truncation**: `paper read` shows 50 sentences by default. Use `--max-lines N` to change, `--max-lines 0` for unlimited.
+- **BibTeX generation**: `paper bibtex <ref>` generates BibTeX entries using multi-source enrichment (arxiv API → Semantic Scholar → Crossref). Normalizes arxiv preprints to published versions when available (rebiber-like). Cached in `~/.papers/<id>/bibtex.bib`. Use `--force` to re-fetch.
 
 ### search
 - Thin httpx wrappers over external APIs (Serper, Semantic Scholar, PubMed, Jina)

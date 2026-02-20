@@ -242,6 +242,45 @@ def info(ctx, reference: str, no_refs: bool):
 
 @cli.command()
 @click.argument("reference")
+@click.option("--force", is_flag=True, default=False, help="Re-fetch from APIs (ignore cache).")
+@click.pass_context
+def bibtex(ctx, reference: str, force: bool):
+    """Generate a BibTeX entry for a paper.
+
+    REFERENCE: arxiv ID, URL, or local PDF path (e.g., 2301.12345)
+
+    Fetches metadata from arxiv, Semantic Scholar, and Crossref to produce
+    a complete BibTeX entry. If the paper was published at a venue, uses
+    that instead of the arxiv preprint (rebiber-like normalization).
+
+    Results are cached. Use --force to re-fetch.
+    """
+    from paper.bibtex import generate_bibtex
+
+    try:
+        doc, arxiv_id, _ = _load_with_paths(reference)
+    except Exception as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise SystemExit(1)
+
+    show_header = not ctx.obj.get("no_header", False)
+    if show_header:
+        render_header(doc)
+
+    try:
+        bib = generate_bibtex(arxiv_id, doc, force=force)
+    except Exception as e:
+        console.print(f"[red]Error generating BibTeX: {e}[/red]")
+        raise SystemExit(1)
+
+    console.print(bib)
+    console.print()
+    console.print(f"  [dim]Cached to ~/.papers/{arxiv_id}/bibtex.bib[/dim]")
+    console.print()
+
+
+@cli.command()
+@click.argument("reference")
 @click.argument("ref_id")
 @click.pass_context
 def goto(ctx, reference: str, ref_id: str):
