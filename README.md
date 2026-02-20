@@ -12,13 +12,13 @@ Designed as building blocks for agentic research workflows, these tools let agen
 ## Install
 
 ```bash
-uv pip install -e .
+pip install agent-papers-cli
 
 # Optional: enable figure/table/equation detection (requires ~40MB for model)
-uv pip install -e ".[layout]"
+pip install agent-papers-cli[layout]
 ```
 
-Requires Python 3.10+.
+Requires Python 3.10+. Also works with `uv pip install agent-papers-cli`.
 
 ## `paper` commands
 
@@ -277,10 +277,17 @@ Two strategies, tried in order:
 
 ## Development
 
+### Setup
+
+```bash
+git clone https://github.com/collaborative-deep-research/agent-papers-cli.git
+cd agent-papers-cli
+uv pip install -e ".[dev]"
+```
+
 ### Run tests
 
 ```bash
-uv pip install -e ".[dev]"
 pytest
 ```
 
