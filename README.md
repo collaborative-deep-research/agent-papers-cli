@@ -26,7 +26,8 @@ To install the [agent skills](#agent-skills) for Claude Code: `npx skills add co
 
 ```bash
 paper outline <ref>                    # Show heading tree
-paper read <ref> [section]             # Read full paper or specific section
+paper read <ref> [section]             # Read full paper or specific section (default: 50 sentences)
+  [--max-lines N]                      # Limit sentences shown (0 = unlimited)
 paper skim <ref> --lines N --level L   # Headings + first N sentences
 paper search <ref> "query"             # Keyword search with context
 paper info <ref>                       # Show metadata
@@ -110,6 +111,24 @@ Use: paper goto 2302.13971 <ref>
 ```
 
 Add `--no-refs` to any command to hide the annotations.
+
+### Header auto-suppression
+
+When you run consecutive `paper` commands on the same paper, the title header is automatically suppressed after the first call (within a 5-minute window). This keeps agent context windows lean and avoids redundant output.
+
+```bash
+paper outline 2302.13971          # header shown
+paper read 2302.13971 "abstract"  # header auto-suppressed
+paper read 2302.13971 "method"    # still suppressed
+paper outline 2502.13811          # different paper — header shown
+```
+
+Use `--include-header` to force the header, or `--no-header` to always suppress it:
+
+```bash
+paper --include-header read 2302.13971 "abstract"   # force header
+paper --no-header outline 2302.13971                 # always suppress
+```
 
 ## Examples
 
