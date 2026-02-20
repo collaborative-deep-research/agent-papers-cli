@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-papers-cli"
-version = "0.0.1"
+version = "0.1.0"
 description = "CLI tools for reading academic papers and searching the web, academic literature, and biomedical databases"
 readme = "README.md"
 requires-python = ">=3.10"
