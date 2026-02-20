@@ -1,0 +1,23 @@
+{
+  "name": "agent-papers-demo",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "npx remotion studio",
+    "build": "npx remotion render src/index.ts DemoVideo out/demo.mp4",
+    "build:gif": "npx remotion render src/index.ts DemoVideo out/demo.gif --image-format=png",
+    "skills": "npx remotion skills add"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "remotion": "^4.0.0"
+  },
+  "devDependencies": {
+    "@remotion/eslint-config": "^4.0.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^5.0.0"
+  }
+}
