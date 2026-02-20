@@ -300,7 +300,21 @@ def annotate_text(
 
 
 def render_header(doc: Document) -> None:
-    """Print paper title and metadata."""
+    """Print paper title and metadata.
+
+    Auto-suppresses if the same paper's header was shown recently
+    (within the TTL window). Keeps the TTL alive on each call so
+    consecutive commands on the same paper never repeat the header.
+    """
+    paper_id = doc.metadata.arxiv_id or ""
+
+    if paper_id and storage.was_header_shown_recently(paper_id):
+        storage.mark_header_shown(paper_id)  # refresh TTL
+        return
+
+    if paper_id:
+        storage.mark_header_shown(paper_id)
+
     meta = doc.metadata
     title_text = Text(meta.title or "(Untitled)", style="bold white")
     subtitle_parts = []
