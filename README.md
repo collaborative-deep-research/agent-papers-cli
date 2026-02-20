@@ -1,9 +1,13 @@
-# paper & search
+# agent-papers-cli
 
-CLI tools for reading academic papers and searching the web, academic literature, and biomedical databases from the terminal.
+Read academic papers, search the literature, and run multi-step research workflows — all from the terminal.
+
+**agent-papers-cli** gives your AI agents (and you) the ability to read academic papers, search Google, Google Scholar, Semantic Scholar, PubMed, and browse webpages — all from the command line. Two CLI tools work together: `paper` for reading and navigating PDFs, and `paper-search` for querying search engines and academic databases.
+
+Designed as building blocks for agentic research workflows, these tools let agents autonomously discover papers, read them in depth, follow citation graphs, and verify claims. The repo includes four [Claude Code skills](#agent-skills) that orchestrate multi-step research tasks like deep-dive investigations, systematic literature reviews, and fact-checking.
 
 - **`paper`** — read, skim, and search PDFs. Inspired by [agent-browser](https://github.com/vercel-labs/agent-browser) — but for PDFs.
-- **`search`** — search Google, Google Scholar, Semantic Scholar, PubMed, and extract webpage content. Based on the search APIs from [dr-tulu](https://github.com/rlresearch/dr-tulu).
+- **`paper-search`** — search Google, Google Scholar, Semantic Scholar, PubMed, and extract webpage content. Based on the search APIs from [dr-tulu](https://github.com/rlresearch/dr-tulu).
 
 ## Install
 
@@ -46,44 +50,44 @@ paper highlight remove <ref> <id>      # Remove a highlight by ID
 
 Arxiv papers are downloaded once and cached in `~/.papers/`. Local PDFs are read directly from disk — each gets a unique cache directory based on its absolute path (`{stem}-{hash8}`), so two different `paper.pdf` files in different directories won't collide. If you modify a local PDF after it's been parsed, the stale cache is automatically detected and re-parsed.
 
-## `search` commands
+## `paper-search` commands
 
 ```bash
 # Environment / API keys
-search env                             # Show API key status
-search env set KEY value               # Save a key to ~/.papers/.env
+paper-search env                             # Show API key status
+paper-search env set KEY value               # Save a key to ~/.papers/.env
 
 # Google (requires SERPER_API_KEY)
-search google web "query"              # Web search
-search google scholar "query"          # Google Scholar search
+paper-search google web "query"              # Web search
+paper-search google scholar "query"          # Google Scholar search
 
 # Semantic Scholar (S2_API_KEY optional, recommended for rate limits)
-search semanticscholar papers "query"  # Paper search
+paper-search semanticscholar papers "query"  # Paper search
   [--year 2023-2025] [--min-citations 10] [--venue ACL] [--sort citationCount:desc] [--limit N]
-search semanticscholar snippets "query"  # Text snippet search
+paper-search semanticscholar snippets "query"  # Text snippet search
   [--year 2024] [--paper-ids id1,id2]
-search semanticscholar citations <id>  # Papers citing this one
-search semanticscholar references <id> # Papers this one references
-search semanticscholar details <id>    # Full paper metadata
+paper-search semanticscholar citations <id>  # Papers citing this one
+paper-search semanticscholar references <id> # Papers this one references
+paper-search semanticscholar details <id>    # Full paper metadata
 
 # PubMed (no key needed)
-search pubmed "query" [--limit N] [--offset N]
+paper-search pubmed "query" [--limit N] [--offset N]
 
 # Browse (requires JINA_API_KEY for jina backend)
-search browse <url> [--backend jina|serper] [--timeout 30]
+paper-search browse <url> [--backend jina|serper] [--timeout 30]
 ```
 
 ### API keys
 
-Set API keys persistently with `search env set`:
+Set API keys persistently with `paper-search env set`:
 
 ```bash
-search env set SERPER_API_KEY sk-...   # required for google, browse --backend serper
-search env set S2_API_KEY ...          # optional, higher Semantic Scholar rate limits
-search env set JINA_API_KEY ...        # required for browse --backend jina
+paper-search env set SERPER_API_KEY sk-...   # required for google, browse --backend serper
+paper-search env set S2_API_KEY ...          # optional, higher Semantic Scholar rate limits
+paper-search env set JINA_API_KEY ...        # required for browse --backend jina
 ```
 
-Keys are saved to `~/.papers/.env` and loaded automatically. Shell environment variables take precedence. Run `search env` to check what's configured.
+Keys are saved to `~/.papers/.env` and loaded automatically. Shell environment variables take precedence. Run `paper-search env` to check what's configured.
 
 ### Jump links
 
@@ -231,7 +235,7 @@ src/paper/                         # paper CLI
 ├── renderer.py    # Rich terminal output, ref registry, goto rendering
 └── storage.py     # ~/.papers/ cache directory management
 
-src/search/                        # search CLI
+src/search/                        # paper-search CLI
 ├── cli.py        # Click CLI — all commands and subgroups
 ├── config.py     # API key loading (dotenv), persistent storage, env status
 ├── models.py     # Data models: SearchResult, SnippetResult, CitationResult, BrowseResult
@@ -320,11 +324,17 @@ paper goto 2302.13971 f1             # jump to figure 1
 | `S2_API_KEY` | — | Semantic Scholar API (optional, increases rate limits) |
 | `JINA_API_KEY` | — | Jina Reader for webpage content extraction |
 
-Search API keys can be set via shell env, `.env` in the working directory, or persistently via `search env set`.
+Search API keys can be set via shell env, `.env` in the working directory, or persistently via `paper-search env set`.
 
 ## Agent Skills
 
-This repo includes Claude Code skills for agent-driven research workflows. See [SKILLS.md](SKILLS.md) for details.
+This repo includes [Claude Code skills](https://agentskills.io) for agent-driven research workflows. Install them into any project with:
+
+```bash
+npx skills add collaborative-deep-research/agent-papers-cli
+```
+
+Or see [SKILLS.md](SKILLS.md) for manual setup and details.
 
 | Skill | Command | Description |
 |-------|---------|-------------|

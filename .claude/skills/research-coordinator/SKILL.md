@@ -73,18 +73,18 @@ paper info <ref>                       # Show metadata
 paper goto <ref> <ref_id>              # Jump to ref (s3, e1, c5)
 ```
 
-### `search` — Search the web and literature
+### `paper-search` — Search the web and literature
 ```
-search env                             # Check API key status
-search google web "query"              # Google web search (Serper)
-search google scholar "query"          # Google Scholar search (Serper)
-search semanticscholar papers "query"  # Academic paper search
-search semanticscholar snippets "query"  # Text snippet search
-search semanticscholar citations <id>  # Papers citing this one
-search semanticscholar references <id> # Papers this one references
-search semanticscholar details <id>    # Full paper metadata
-search pubmed "query" [--limit N]      # PubMed biomedical search
-search browse <url>                    # Extract webpage content
+paper-search env                             # Check API key status
+paper-search google web "query"              # Google web search (Serper)
+paper-search google scholar "query"          # Google Scholar search (Serper)
+paper-search semanticscholar papers "query"  # Academic paper search
+paper-search semanticscholar snippets "query"  # Text snippet search
+paper-search semanticscholar citations <id>  # Papers citing this one
+paper-search semanticscholar references <id> # Papers this one references
+paper-search semanticscholar details <id>    # Full paper metadata
+paper-search pubmed "query" [--limit N]      # PubMed biomedical search
+paper-search browse <url>                    # Extract webpage content
 ```
 
 ## Guidelines

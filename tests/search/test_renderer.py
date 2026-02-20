@@ -61,7 +61,7 @@ class TestRenderSearchResults:
             SearchResult(title="Blog Post", url="https://blog.example.com/post"),
         ]
         output = _capture_output(render_search_results, results)
-        assert "search browse" in output
+        assert "paper-search browse" in output
 
     def test_metadata_display(self):
         results = [
@@ -131,7 +131,7 @@ class TestRenderCitationResults:
     def test_details_suggestion(self):
         results = [CitationResult(title="T", paper_id="abc123")]
         output = _capture_output(render_citation_results, results)
-        assert "search semanticscholar details abc123" in output
+        assert "paper-search semanticscholar details abc123" in output
 
 
 class TestRenderPaperDetails:

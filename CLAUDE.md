@@ -1,10 +1,10 @@
-# Project: paper & search CLI
+# Project: paper & paper-search CLI
 
-Two CLI tools in one repo: `paper` (read academic PDFs) and `search` (web + academic search). See README.md for full docs and SKILLS.md for agent workflows.
+Two CLI tools in one repo: `paper` (read academic PDFs) and `paper-search` (web + academic search). See README.md for full docs and SKILLS.md for agent workflows.
 
 ## Quick reference
 
-- **Entry points**: `paper = paper.cli:cli`, `search = search.cli:cli` (Click)
+- **Entry points**: `paper = paper.cli:cli`, `paper-search = search.cli:cli` (Click)
 - **paper modules**: `cli.py`, `parser.py`, `fetcher.py`, `storage.py`, `renderer.py`, `models.py`, `highlighter.py`, `layout.py`
 - **search modules**: `cli.py`, `config.py`, `models.py`, `renderer.py`, `backends/{google,semanticscholar,pubmed,browse}.py`
 - **Cache**: `~/.papers/<paper_id>/` (papers: `paper.pdf`, `parsed.json`, `metadata.json`, `highlights.json`, `layout.json`, `layout/*.png`, `paper_annotated.pdf`), `~/.papers/.models/` (YOLO weights), `~/.papers/.env` (persistent API keys)
@@ -29,6 +29,6 @@ Two CLI tools in one repo: `paper` (read academic PDFs) and `search` (web + acad
 ### search
 - Thin httpx wrappers over external APIs (Serper, Semantic Scholar, PubMed, Jina)
 - API keys loaded via python-dotenv in priority order: shell env > `.env` in cwd > `~/.papers/.env`
-- `search env set` saves keys persistently to `~/.papers/.env`
+- `paper-search env set` saves keys persistently to `~/.papers/.env`
 - Semantic Scholar backend uses tenacity for retry on 429 rate limits
 - Renderer outputs reference IDs (`[r1]`, `[s1]`, `[c1]`) and suggestive next-action prompts

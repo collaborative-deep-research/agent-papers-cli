@@ -5,14 +5,14 @@ argument-hint: [topic or question]
 allowed-tools: Bash, Read, Glob, Grep, Write
 ---
 
-Research "$ARGUMENTS" in depth using the `paper` and `search` CLI tools. Follow this workflow:
+Research "$ARGUMENTS" in depth using the `paper` and `paper-search` CLI tools. Follow this workflow:
 
 ## 1. Broad Discovery
 
 Start with broad searches to map the landscape:
 ```
-search google web "$ARGUMENTS"
-search semanticscholar papers "$ARGUMENTS" --limit 10
+paper-search google web "$ARGUMENTS"
+paper-search semanticscholar papers "$ARGUMENTS" --limit 10
 ```
 
 Scan titles, snippets, and citation counts. Identify the most relevant papers and key terms.
@@ -21,9 +21,9 @@ Scan titles, snippets, and citation counts. Identify the most relevant papers an
 
 Refine based on what you found:
 ```
-search semanticscholar papers "<refined query>" --year 2023-2025 --min-citations 10
-search semanticscholar snippets "<specific question>"
-search pubmed "<query>"   # if biomedical
+paper-search semanticscholar papers "<refined query>" --year 2023-2025 --min-citations 10
+paper-search semanticscholar snippets "<specific question>"
+paper-search pubmed "<query>"   # if biomedical
 ```
 
 ## 3. Deep Read
@@ -37,16 +37,16 @@ paper read <arxiv_id> <section>    # read key sections
 
 For web sources:
 ```
-search browse <url>
+paper-search browse <url>
 ```
 
 ## 4. Follow the Citation Graph
 
 For key papers, explore their context:
 ```
-search semanticscholar citations <paper_id> --limit 10    # who cites this?
-search semanticscholar references <paper_id> --limit 10   # what does it build on?
-search semanticscholar details <paper_id>                  # full metadata
+paper-search semanticscholar citations <paper_id> --limit 10    # who cites this?
+paper-search semanticscholar references <paper_id> --limit 10   # what does it build on?
+paper-search semanticscholar details <paper_id>                  # full metadata
 ```
 
 ## 5. Synthesize
@@ -62,6 +62,6 @@ Combine findings into a structured report with:
 - Always start broad, then narrow. Don't read deeply until you've scanned widely.
 - Read at least 3-5 primary sources before synthesizing.
 - Cross-reference web sources against academic papers when possible.
-- Use `search semanticscholar snippets` to find specific evidence for claims.
+- Use `paper-search semanticscholar snippets` to find specific evidence for claims.
 - Track what you've already searched/read to avoid redundancy.
 - If a search returns arxiv papers, use `paper read` to get the full text rather than just the snippet.

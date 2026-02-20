@@ -3,11 +3,30 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "paper-cli"
-version = "0.2.0"
+name = "agent-papers-cli"
+version = "0.0.1"
 description = "CLI tools for reading academic papers and searching the web, academic literature, and biomedical databases"
 readme = "README.md"
 requires-python = ">=3.10"
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "Shannon Shen", email = "shannonshen49@gmail.com"},
+    {name = "collaborative-deep-research"},
+]
+keywords = ["academic", "papers", "search", "arxiv", "cli", "pdf", "semantic-scholar", "pubmed"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Text Processing",
+]
 dependencies = [
     "click>=8.0",
     "httpx>=0.27",
@@ -20,7 +39,7 @@ dependencies = [
 
 [project.scripts]
 paper = "paper.cli:cli"
-search = "search.cli:cli"
+paper-search = "search.cli:cli"
 
 [project.optional-dependencies]
 layout = ["doclayout-yolo>=0.0.4", "huggingface-hub>=0.20"]
@@ -28,6 +47,11 @@ dev = ["pytest>=8.0"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/paper", "src/search"]
+
+[project.urls]
+Homepage = "https://github.com/collaborative-deep-research/agent-papers-cli"
+Repository = "https://github.com/collaborative-deep-research/agent-papers-cli"
+Issues = "https://github.com/collaborative-deep-research/agent-papers-cli/issues"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

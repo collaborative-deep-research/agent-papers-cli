@@ -15,9 +15,9 @@ Break the claim into specific, verifiable sub-claims. List them explicitly befor
 
 For each sub-claim:
 ```
-search google web "<sub-claim as question>"
-search semanticscholar snippets "<sub-claim keywords>"
-search semanticscholar papers "<sub-claim keywords>" --limit 5
+paper-search google web "<sub-claim as question>"
+paper-search semanticscholar snippets "<sub-claim keywords>"
+paper-search semanticscholar papers "<sub-claim keywords>" --limit 5
 ```
 
 ## 3. Verify Sources
@@ -25,7 +25,7 @@ search semanticscholar papers "<sub-claim keywords>" --limit 5
 For each promising source:
 ```
 paper read <arxiv_id> <relevant section>   # for academic papers
-search browse <url>                         # for web pages
+paper-search browse <url>                   # for web pages
 ```
 
 Prefer primary sources (original papers, official data) over secondary reports.

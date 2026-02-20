@@ -11,9 +11,9 @@ console = Console()
 
 
 @click.group()
-@click.version_option(package_name="paper-cli")
+@click.version_option(package_name="agent-papers-cli")
 def cli():
-    """search - Search the web, academic papers, and medical literature."""
+    """paper-search - Search the web, academic papers, and medical literature."""
     pass
 
 
@@ -28,7 +28,7 @@ def env(ctx):
     """Show or configure API keys.
 
     Run without arguments to see current status.
-    Use `search env set KEY value` to save a key to ~/.papers/.env.
+    Use `paper-search env set KEY value` to save a key to ~/.papers/.env.
     """
     if ctx.invoked_subcommand is not None:
         return
@@ -49,7 +49,7 @@ def env(ctx):
 
     if not all(is_set for _, is_set, _ in statuses):
         console.print(
-            "Tip: Run `search env set KEY value` to save a key persistently.",
+            "Tip: Run `paper-search env set KEY value` to save a key persistently.",
             style="dim",
         )
 

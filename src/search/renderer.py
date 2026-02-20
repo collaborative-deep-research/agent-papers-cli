@@ -26,7 +26,7 @@ def _suggestion_lines(result: SearchResult) -> list[str]:
         lines.append(f"  > Use `paper read {arxiv_id}` to read this paper")
         lines.append(f"  > Use `paper outline {arxiv_id}` to see its structure")
     elif result.url:
-        lines.append(f"  > Use `search browse {result.url}` to read full content")
+        lines.append(f"  > Use `paper-search browse {result.url}` to read full content")
     return lines
 
 
@@ -150,7 +150,7 @@ def render_citation_results(
 
         if c.paper_id:
             console.print(
-                f"  > Use `search semanticscholar details {c.paper_id}` for more info",
+                f"  > Use `paper-search semanticscholar details {c.paper_id}` for more info",
                 style="dim italic",
             )
 
@@ -193,11 +193,11 @@ def render_paper_details(result: SearchResult) -> None:
         console.print(f"> Use `paper outline {arxiv_id}` to see its structure", style="dim italic")
     if result.paper_id:
         console.print(
-            f"> Use `search semanticscholar citations {result.paper_id}` to see who cites this",
+            f"> Use `paper-search semanticscholar citations {result.paper_id}` to see who cites this",
             style="dim italic",
         )
         console.print(
-            f"> Use `search semanticscholar references {result.paper_id}` to see its references",
+            f"> Use `paper-search semanticscholar references {result.paper_id}` to see its references",
             style="dim italic",
         )
     console.print()

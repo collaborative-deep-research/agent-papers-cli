@@ -3,17 +3,17 @@
 API keys are loaded in priority order:
   1. Shell environment variables (highest priority)
   2. .env file in current directory
-  3. ~/.papers/.env (persistent config, set via `search env set`)
+  3. ~/.papers/.env (persistent config, set via `paper-search env set`)
 
-Run `search env` to see which keys are configured.
-Run `search env set KEY value` to save a key persistently.
+Run `paper-search env` to see which keys are configured.
+Run `paper-search env set KEY value` to save a key persistently.
 
 Required keys per command:
-    search google web/scholar  ->  SERPER_API_KEY
-    search semanticscholar *   ->  S2_API_KEY (optional but recommended for higher rate limits)
-    search pubmed              ->  (no key needed)
-    search browse --backend jina   ->  JINA_API_KEY
-    search browse --backend serper ->  SERPER_API_KEY
+    paper-search google web/scholar  ->  SERPER_API_KEY
+    paper-search semanticscholar *   ->  S2_API_KEY (optional but recommended for higher rate limits)
+    paper-search pubmed              ->  (no key needed)
+    paper-search browse --backend jina   ->  JINA_API_KEY
+    paper-search browse --backend serper ->  SERPER_API_KEY
 """
 
 from __future__ import annotations
@@ -73,7 +73,7 @@ def get_serper_key() -> str:
     if not key:
         raise ValueError(
             "SERPER_API_KEY is not set. "
-            "Run `search env set SERPER_API_KEY <your-key>` to configure it."
+            "Run `paper-search env set SERPER_API_KEY <your-key>` to configure it."
         )
     return key
 
@@ -88,7 +88,7 @@ def get_jina_key() -> str:
     if not key:
         raise ValueError(
             "JINA_API_KEY is not set. "
-            "Run `search env set JINA_API_KEY <your-key>` to configure it."
+            "Run `paper-search env set JINA_API_KEY <your-key>` to configure it."
         )
     return key
 
@@ -99,15 +99,15 @@ VALID_KEYS = {"SERPER_API_KEY", "S2_API_KEY", "JINA_API_KEY"}
 
 ENV_VARS = {
     "SERPER_API_KEY": {
-        "required_by": ["search google", "search browse --backend serper"],
+        "required_by": ["paper-search google", "paper-search browse --backend serper"],
         "description": "Google search and scraping via Serper.dev",
     },
     "S2_API_KEY": {
-        "required_by": ["search semanticscholar (optional, increases rate limits)"],
+        "required_by": ["paper-search semanticscholar (optional, increases rate limits)"],
         "description": "Semantic Scholar academic paper API",
     },
     "JINA_API_KEY": {
-        "required_by": ["search browse --backend jina"],
+        "required_by": ["paper-search browse --backend jina"],
         "description": "Jina Reader for webpage content extraction",
     },
 }
