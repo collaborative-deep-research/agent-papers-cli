@@ -10,15 +10,16 @@ import logging
 import os
 import shutil
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
-from ..common import map_with_progress, save_checkpoint, load_checkpoint
+from ..common import map_with_progress
 from ..graders import grade_coverage
-from ..sampler import ClaudeCodeSampler
-from ..types import EvalResult, SingleEvalResult
+from ..types import SingleEvalResult
 from .base import Eval
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_SKILL = "deep-research"
 
 
 # ---------------------------------------------------------------------------
@@ -84,7 +85,7 @@ def load_researchqa_data(json_path: str) -> list[ResearchQAItem]:
 
 
 # ---------------------------------------------------------------------------
-# Eval class
+# Eval
 # ---------------------------------------------------------------------------
 
 
@@ -95,6 +96,7 @@ class ResearchQAEval(Eval):
         num_examples: int | None = None,
         n_threads: int = 10,
         grader_model: str = "gpt-4.1-mini",
+        skill: str | None = DEFAULT_SKILL,
     ):
         if data_path is None:
             data_path = download_researchqa_dataset()
@@ -104,21 +106,23 @@ class ResearchQAEval(Eval):
         self.data_path = data_path
         self.n_threads = n_threads
         self.grader_model = grader_model
+        self.skill = skill
 
-    def generate(self, sampler: ClaudeCodeSampler) -> list[dict[str, Any]]:
-        """Generate responses for all ResearchQA items."""
+    def _make_prompt(self, query: str) -> str:
+        if self.skill:
+            return f"/{self.skill} {query}"
+        return query
 
+    def generate(self, run: Callable[..., dict]) -> list[dict[str, Any]]:
         def generate_single(item: ResearchQAItem) -> dict[str, Any]:
-            prompt = [{"role": "user", "content": item.query}]
-            response = sampler(prompt)
+            prompt = self._make_prompt(item.query)
+            result = run(prompt)
             return {
                 "item_id": item.id,
                 "query": item.query,
                 "field": item.field,
-                "response_text": response.response_text,
-                "messages": response.messages,
-                "tool_calls": response.tool_calls,
-                "metadata": response.metadata,
+                "response_text": result.get("result", ""),
+                "claude": result,
                 "rubric": [
                     {"rubric_item": r.rubric_item, "type": r.type}
                     for r in item.rubric
@@ -130,8 +134,6 @@ class ResearchQAEval(Eval):
         )
 
     def evaluate(self, generation_data: list[dict[str, Any]]) -> list[SingleEvalResult]:
-        """Evaluate responses using coverage scoring."""
-
         def evaluate_single(gen: dict[str, Any]) -> SingleEvalResult:
             rubric_items = [r["rubric_item"] for r in gen["rubric"]]
             coverage_score, rubric_judges = grade_coverage(
@@ -143,10 +145,11 @@ class ResearchQAEval(Eval):
                 id=gen["item_id"],
                 score=coverage_score,
                 metrics={"coverage_score": coverage_score},
-                convo=gen.get("messages"),
                 metadata={
                     "field": gen["field"],
                     "rubric_judges": rubric_judges,
+                    "num_turns": gen["claude"].get("num_turns"),
+                    "cost_usd": gen["claude"].get("total_cost_usd"),
                 },
             )
 

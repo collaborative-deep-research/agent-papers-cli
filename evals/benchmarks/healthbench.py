@@ -11,17 +11,18 @@ import os
 import random
 import urllib.request
 from collections import defaultdict
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
 import numpy as np
 
 from ..common import map_with_progress
 from ..graders import grade_rubric
-from ..sampler import ClaudeCodeSampler
 from ..types import EvalResult, SingleEvalResult
 from .base import Eval
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_SKILL = "deep-research"
 
 INPUT_URLS = {
     "all": "https://openaipublic.blob.core.windows.net/simple-evals/healthbench/2025-05-07-06-14-12_oss_eval.jsonl",
@@ -34,7 +35,6 @@ def _load_healthbench_data(
     subset: str = "all",
     cache_dir: str = "evals/data/healthbench",
 ) -> list[dict[str, Any]]:
-    """Load HealthBench examples (downloads and caches locally)."""
     url = INPUT_URLS[subset]
     filename = url.rsplit("/", 1)[-1]
     local_path = os.path.join(cache_dir, filename)
@@ -64,6 +64,7 @@ class HealthBenchEval(Eval):
         num_examples: int | None = None,
         n_threads: int = 10,
         grader_model: str = "gpt-4.1-mini",
+        skill: str | None = DEFAULT_SKILL,
     ):
         examples = _load_healthbench_data(subset)
         if num_examples is not None and num_examples < len(examples):
@@ -72,19 +73,33 @@ class HealthBenchEval(Eval):
         self.examples = examples
         self.n_threads = n_threads
         self.grader_model = grader_model
+        self.skill = skill
 
-    def generate(self, sampler: ClaudeCodeSampler) -> list[dict[str, Any]]:
-        """Generate responses for each HealthBench prompt."""
+    def _make_prompt(self, messages: list[dict[str, str]]) -> str:
+        """Format multi-turn HealthBench prompt for ``claude -p``."""
+        if len(messages) == 1:
+            body = messages[0]["content"]
+        else:
+            parts = []
+            for msg in messages[:-1]:
+                parts.append(f"{msg['role'].capitalize()}: {msg['content']}")
+            history = "\n\n".join(parts)
+            body = (
+                f"<conversation_history>\n{history}\n</conversation_history>\n\n"
+                f"{messages[-1]['content']}"
+            )
+        if self.skill:
+            return f"/{self.skill} {body}"
+        return body
 
+    def generate(self, run: Callable[..., dict]) -> list[dict[str, Any]]:
         def generate_single(example: dict[str, Any]) -> dict[str, Any]:
-            prompt_messages = example["prompt"]
-            response = sampler(prompt_messages)
+            prompt = self._make_prompt(example["prompt"])
+            result = run(prompt)
             return {
                 "row": example,
-                "response_text": response.response_text,
-                "messages": response.messages,
-                "tool_calls": response.tool_calls,
-                "metadata": response.metadata,
+                "response_text": result.get("result", ""),
+                "claude": result,
             }
 
         return map_with_progress(
@@ -92,34 +107,22 @@ class HealthBenchEval(Eval):
         )
 
     def evaluate(self, generation_data: list[dict[str, Any]]) -> list[SingleEvalResult]:
-        """Evaluate responses against rubric items."""
-
         def evaluate_single(gen: dict[str, Any]) -> SingleEvalResult:
             row = gen["row"]
-            rubric_dicts = row["rubrics"]
-            # Ensure rubric items are dicts
-            if rubric_dicts and isinstance(rubric_dicts[0], dict):
-                rubric_items = rubric_dicts
-            else:
-                rubric_items = [r.to_dict() if hasattr(r, "to_dict") else r for r in rubric_dicts]
-
-            prompt_messages = gen.get("messages", row["prompt"])
-            # Use only the original prompt for grading (not tool-use conversation)
-            original_prompt = row["prompt"]
+            rubric_items = row["rubrics"]
+            if rubric_items and not isinstance(rubric_items[0], dict):
+                rubric_items = [r.to_dict() for r in rubric_items]
 
             score, grading_results = grade_rubric(
-                original_prompt,
+                row["prompt"],
                 gen["response_text"],
                 rubric_items,
                 model=self.grader_model,
             )
 
-            # Compute per-tag scores
             metrics: dict[str, float] = {"overall_score": score}
-            # Example-level tags
             for tag in row.get("example_tags", []):
                 metrics[tag] = score
-            # Rubric-level tags
             tag_items: dict[str, list[tuple[dict, dict]]] = defaultdict(list)
             for item, grade in zip(rubric_items, grading_results):
                 for tag in item.get("tags", []):
@@ -127,16 +130,13 @@ class HealthBenchEval(Eval):
             for tag, pairs in tag_items.items():
                 total = sum(it["points"] for it, _ in pairs if it["points"] > 0)
                 if total > 0:
-                    achieved = sum(
-                        it["points"] for it, gr in pairs if gr.get("criteria_met")
-                    )
+                    achieved = sum(it["points"] for it, gr in pairs if gr.get("criteria_met"))
                     metrics[tag] = achieved / total
 
             return SingleEvalResult(
                 id=row["id"],
                 score=score,
                 metrics=metrics,
-                convo=gen.get("messages"),
                 metadata={"grading_results": grading_results},
             )
 
@@ -144,15 +144,13 @@ class HealthBenchEval(Eval):
             evaluate_single, generation_data, num_threads=self.n_threads
         )
 
-    def __call__(self, sampler: ClaudeCodeSampler) -> EvalResult:
-        """Override to use clipped mean aggregation."""
-        gen_data = self.generate(sampler)
+    def __call__(self, run: Callable[..., dict]) -> EvalResult:
+        """Override to use clipped-mean aggregation."""
+        gen_data = self.generate(run)
         results = self.evaluate(gen_data)
 
-        # Clipped-mean aggregation (HealthBench-specific)
         name2values: dict[str, list[float]] = defaultdict(list)
         per_example_results = []
-
         for r in results:
             for name, value in r.metrics.items():
                 name2values[name].append(value)

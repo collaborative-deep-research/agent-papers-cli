@@ -1,8 +1,7 @@
 """Reference listing of paper/paper-search CLI commands.
 
-When using the ClaudeCodeSampler, Claude Code has direct access to these
-tools via Bash.  This module exists purely as documentation — the sampler
-does not import anything from here.
+Claude Code has direct access to these tools via Bash.  This module
+exists purely as documentation.
 
 Paper tools
 -----------
