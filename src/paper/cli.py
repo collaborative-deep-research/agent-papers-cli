@@ -7,6 +7,7 @@ from rich.console import Console
 
 from paper.fetcher import fetch_paper
 from paper.parser import parse_paper
+from paper import renderer as _renderer
 from paper.renderer import (
     build_ref_registry,
     render_full,
@@ -88,11 +89,15 @@ def _find_section(doc, section_name: str):
 @click.version_option(package_name="agent-papers-cli")
 @click.option("--no-header", is_flag=True, default=False, hidden=True,
               help="Suppress the title header (useful for consecutive commands on the same paper).")
+@click.option("--include-header", is_flag=True, default=False, hidden=True,
+              help="Force the title header even when auto-suppression would hide it.")
 @click.pass_context
-def cli(ctx, no_header: bool):
+def cli(ctx, no_header: bool, include_header: bool):
     """paper - A CLI for reading, skimming, and searching academic papers."""
     ctx.ensure_object(dict)
     ctx.obj["no_header"] = no_header
+    if include_header:
+        _renderer._force_header = True
 
 
 DEFAULT_MAX_LINES = 50

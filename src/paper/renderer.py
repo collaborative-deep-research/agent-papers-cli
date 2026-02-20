@@ -16,6 +16,9 @@ from paper import storage
 
 console = Console()
 
+# Module-level flag set by CLI --include-header to bypass auto-suppression.
+_force_header = False
+
 
 @dataclass
 class RefEntry:
@@ -308,7 +311,7 @@ def render_header(doc: Document) -> None:
     """
     paper_id = doc.metadata.arxiv_id or ""
 
-    if paper_id and storage.was_header_shown_recently(paper_id):
+    if not _force_header and paper_id and storage.was_header_shown_recently(paper_id):
         storage.mark_header_shown(paper_id)  # refresh TTL
         return
 
