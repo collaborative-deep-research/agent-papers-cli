@@ -16,6 +16,9 @@ from paper import storage
 
 console = Console()
 
+# Module-level flag set by CLI --include-header to bypass auto-suppression.
+_force_header = False
+
 
 @dataclass
 class RefEntry:
@@ -300,7 +303,21 @@ def annotate_text(
 
 
 def render_header(doc: Document) -> None:
-    """Print paper title and metadata."""
+    """Print paper title and metadata.
+
+    Auto-suppresses if the same paper's header was shown recently
+    (within the TTL window). Keeps the TTL alive on each call so
+    consecutive commands on the same paper never repeat the header.
+    """
+    paper_id = doc.metadata.arxiv_id or ""
+
+    if not _force_header and paper_id and storage.was_header_shown_recently(paper_id):
+        storage.mark_header_shown(paper_id)  # refresh TTL
+        return
+
+    if paper_id:
+        storage.mark_header_shown(paper_id)
+
     meta = doc.metadata
     title_text = Text(meta.title or "(Untitled)", style="bold white")
     subtitle_parts = []
@@ -319,9 +336,10 @@ def render_header(doc: Document) -> None:
     console.print()
 
 
-def render_outline(doc: Document, refs: bool = True) -> None:
+def render_outline(doc: Document, refs: bool = True, show_header: bool = True) -> None:
     """Print the heading tree."""
-    render_header(doc)
+    if show_header:
+        render_header(doc)
 
     registry = build_ref_registry(doc) if refs else []
     sec_refs = _section_ref_map(registry) if refs else {}
@@ -356,11 +374,14 @@ def render_outline(doc: Document, refs: bool = True) -> None:
 
 def render_section(section: Section, show_heading: bool = True, refs: bool = True,
                    registry: list[RefEntry] | None = None,
-                   doc: Document | None = None) -> None:
+                   doc: Document | None = None,
+                   max_lines: int | None = None,
+                   paper_id: str = "") -> None:
     """Print a single section's content.
 
     Refs annotate inline citations/links (navigation targets), not the
     section heading itself — the heading is where you already are.
+    If max_lines is set, truncate and show a "show more" hint.
     """
     if show_heading:
         indent = "  " * (section.level - 1)
@@ -370,7 +391,16 @@ def render_section(section: Section, show_heading: bool = True, refs: bool = Tru
 
     seen_refs: set[str] = set()
 
-    for sentence in section.sentences:
+    sentences = section.sentences
+    total = len(sentences)
+    truncated = False
+    unit = "sentences"
+
+    if max_lines and total > max_lines:
+        sentences = sentences[:max_lines]
+        truncated = True
+
+    for sentence in sentences:
         text = sentence.text
         if refs and doc and registry:
             text = annotate_text(text, doc, registry,
@@ -380,19 +410,36 @@ def render_section(section: Section, show_heading: bool = True, refs: bool = Tru
 
     if not section.sentences and section.content:
         # Fall back to raw content if no sentences parsed
-        for line in section.content.split("\n"):
-            if line.strip():
-                text = line.strip()
-                if refs and doc and registry:
-                    text = annotate_text(text, doc, registry, seen_refs=seen_refs)
-                console.print(f"  {text}")
+        lines = [l.strip() for l in section.content.split("\n") if l.strip()]
+        total = len(lines)
+        unit = "lines"
+        if max_lines and total > max_lines:
+            lines = lines[:max_lines]
+            truncated = True
+        for line in lines:
+            text = line
+            if refs and doc and registry:
+                text = annotate_text(text, doc, registry, seen_refs=seen_refs)
+            console.print(f"  {text}")
 
     console.print()
 
+    if truncated:
+        id_hint = f" {paper_id}" if paper_id else ""
+        console.print(f"[dim]Showing {max_lines} of {total} {unit}. "
+                      f"Use: paper read{id_hint} \"{section.heading}\" --max-lines 0[/dim]")
+        console.print()
 
-def render_full(doc: Document, refs: bool = True) -> None:
-    """Print the full paper."""
-    render_header(doc)
+
+def render_full(doc: Document, refs: bool = True, show_header: bool = True) -> None:
+    """Print the full paper.
+
+    Note: max_lines is intentionally not applied here — ``paper read <ref>``
+    without a section name is an explicit "show everything" request.
+    Truncation only applies to single-section reads via ``paper read <ref> "section"``.
+    """
+    if show_header:
+        render_header(doc)
 
     registry = build_ref_registry(doc) if refs else []
 
@@ -404,9 +451,10 @@ def render_full(doc: Document, refs: bool = True) -> None:
 
 
 def render_skim(doc: Document, num_lines: int = 2, max_level: int | None = None,
-                refs: bool = True) -> None:
+                refs: bool = True, show_header: bool = True) -> None:
     """Print headings with first N sentences per section."""
-    render_header(doc)
+    if show_header:
+        render_header(doc)
 
     registry = build_ref_registry(doc) if refs else []
     sec_refs = _section_ref_map(registry) if refs else {}
@@ -447,10 +495,12 @@ def render_skim(doc: Document, num_lines: int = 2, max_level: int | None = None,
 
 
 def render_search_results(
-    doc: Document, query: str, context_lines: int = 2, refs: bool = True
+    doc: Document, query: str, context_lines: int = 2, refs: bool = True,
+    show_header: bool = True,
 ) -> int:
     """Search and display matches with context. Returns match count."""
-    render_header(doc)
+    if show_header:
+        render_header(doc)
 
     registry = build_ref_registry(doc) if refs else []
     sec_refs = _section_ref_map(registry) if refs else {}
@@ -521,10 +571,11 @@ def render_search_results(
 
 
 def render_highlight_matches(
-    matches: list[dict], query: str, doc: Document
+    matches: list[dict], query: str, doc: Document, show_header: bool = True,
 ) -> None:
     """Render highlight search matches with context."""
-    render_header(doc)
+    if show_header:
+        render_header(doc)
     query_lower = query.lower()
 
     if not matches:
@@ -556,9 +607,10 @@ def render_highlight_matches(
     console.print()
 
 
-def render_highlight_list(highlights: list[dict], doc: Document) -> None:
+def render_highlight_list(highlights: list[dict], doc: Document, show_header: bool = True) -> None:
     """Render stored highlights for a paper."""
-    render_header(doc)
+    if show_header:
+        render_header(doc)
 
     if not highlights:
         console.print("  [dim]No highlights saved.[/dim]")
@@ -722,7 +774,7 @@ def _extract_ref_from_pdf(pdf_path: Path, cite_link: Link) -> str | None:
         return None
 
 
-def render_goto(doc: Document, ref_id: str) -> bool:
+def render_goto(doc: Document, ref_id: str, show_header: bool = True) -> bool:
     """Jump to a reference. Returns True if found, False otherwise."""
     registry = build_ref_registry(doc)
 
@@ -745,7 +797,8 @@ def render_goto(doc: Document, ref_id: str) -> bool:
         # Find and render a preview of the section
         for section in doc.sections:
             if section.heading == entry.target:
-                render_header(doc)
+                if show_header:
+                    render_header(doc)
 
                 # Print heading (no section ref — you're already navigating here)
                 indent = "  " * (section.level - 1)
@@ -782,7 +835,8 @@ def render_goto(doc: Document, ref_id: str) -> bool:
         return False
 
     elif entry.kind == "external":
-        render_header(doc)
+        if show_header:
+            render_header(doc)
         console.print(f"  [bold]Link {entry.ref_id}:[/bold] {entry.target}")
         # Find context: which page/section this link appeared in
         for link in doc.links:
@@ -800,7 +854,8 @@ def render_goto(doc: Document, ref_id: str) -> bool:
         return True
 
     elif entry.kind == "citation":
-        render_header(doc)
+        if show_header:
+            render_header(doc)
         console.print(f"  [bold]Citation {entry.ref_id}:[/bold] {entry.label}")
         console.print()
 
@@ -823,7 +878,8 @@ def render_goto(doc: Document, ref_id: str) -> bool:
         # Find matching layout element
         for elem in doc.layout_elements:
             if elem.label == entry.target:
-                render_header(doc)
+                if show_header:
+                    render_header(doc)
                 _render_layout_element(elem, entry.ref_id)
                 return True
         console.print(f"[red]Layout element not found: {entry.target}[/red]")
@@ -849,13 +905,14 @@ def _render_layout_element(elem: LayoutElement, ref_id: str) -> None:
 
 
 def render_layout_list(
-    doc: Document, kind: str | None = None
+    doc: Document, kind: str | None = None, show_header: bool = True,
 ) -> None:
     """List detected layout elements (figures, tables, equations).
 
     If kind is None, show all; otherwise filter to that kind.
     """
-    render_header(doc)
+    if show_header:
+        render_header(doc)
 
     registry = build_ref_registry(doc)
     elements = doc.layout_elements

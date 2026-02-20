@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -153,3 +154,31 @@ def save_highlights(paper_id: str, highlights: list[dict]) -> None:
     tmp = p.with_suffix(".tmp")
     tmp.write_text(json.dumps(highlights, indent=2, ensure_ascii=False))
     tmp.rename(p)
+
+
+# --- Header auto-suppression ---
+
+_LAST_HEADER_PATH = PAPERS_DIR / ".last_header"
+_HEADER_TTL = 300  # seconds — suppress duplicate header for 5 minutes
+
+
+def was_header_shown_recently(paper_id: str) -> bool:
+    """Check if the header was recently shown for this paper."""
+    try:
+        data = json.loads(_LAST_HEADER_PATH.read_text())
+        if data.get("paper_id") == paper_id:
+            return (time.time() - data.get("timestamp", 0)) < _HEADER_TTL
+    except (FileNotFoundError, json.JSONDecodeError, KeyError):
+        pass
+    return False
+
+
+def mark_header_shown(paper_id: str) -> None:
+    """Record that the header was displayed for this paper."""
+    ensure_dirs()
+    tmp = _LAST_HEADER_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps({
+        "paper_id": paper_id,
+        "timestamp": time.time(),
+    }))
+    tmp.rename(_LAST_HEADER_PATH)

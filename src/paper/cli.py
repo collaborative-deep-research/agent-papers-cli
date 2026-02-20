@@ -7,6 +7,7 @@ from rich.console import Console
 
 from paper.fetcher import fetch_paper
 from paper.parser import parse_paper
+from paper import renderer as _renderer
 from paper.renderer import (
     build_ref_registry,
     render_full,
@@ -85,22 +86,40 @@ def _find_section(doc, section_name: str):
 
 
 @click.group()
-@click.version_option(package_name="paper-cli")
-def cli():
+@click.version_option(package_name="agent-papers-cli")
+@click.option("--no-header", is_flag=True, default=False, hidden=True,
+              help="Suppress the title header (useful for consecutive commands on the same paper).")
+@click.option("--include-header", is_flag=True, default=False, hidden=True,
+              help="Force the title header even when auto-suppression would hide it.")
+@click.pass_context
+def cli(ctx, no_header: bool, include_header: bool):
     """paper - A CLI for reading, skimming, and searching academic papers."""
-    pass
+    ctx.ensure_object(dict)
+    if no_header and include_header:
+        raise click.UsageError("Options --no-header and --include-header are mutually exclusive.")
+    ctx.obj["no_header"] = no_header
+    if include_header:
+        _renderer._force_header = True
+        ctx.call_on_close(lambda: setattr(_renderer, "_force_header", False))
+
+
+DEFAULT_MAX_LINES = 50
 
 
 @cli.command()
 @click.argument("reference")
 @click.argument("section", required=False, default=None)
 @click.option("--no-refs", is_flag=True, default=False, help="Hide [ref=...] annotations.")
-def read(reference: str, section: str | None, no_refs: bool):
+@click.option("--max-lines", default=None, type=int,
+              help=f"Max sentences to show for a section (default: {DEFAULT_MAX_LINES}). Use 0 for unlimited.")
+@click.pass_context
+def read(ctx, reference: str, section: str | None, no_refs: bool, max_lines: int | None):
     """Read a paper (full or specific section).
 
     REFERENCE: arxiv ID or URL (e.g., 2301.12345)
     SECTION: optional section name to read (e.g., "method")
     """
+    show_header = not ctx.obj.get("no_header", False)
     try:
         doc = _load(reference)
     except Exception as e:
@@ -112,8 +131,16 @@ def read(reference: str, section: str | None, no_refs: bool):
         if matched:
             refs = not no_refs
             registry = build_ref_registry(doc) if refs else []
-            render_header(doc)
-            render_section(matched, refs=refs, registry=registry, doc=doc)
+            if show_header:
+                render_header(doc)
+
+            # Determine max lines: explicit flag > default for sections
+            limit = max_lines if max_lines is not None else DEFAULT_MAX_LINES
+            if limit == 0:
+                limit = None  # unlimited
+
+            render_section(matched, refs=refs, registry=registry, doc=doc,
+                           max_lines=limit, paper_id=doc.metadata.arxiv_id)
             if refs and registry:
                 _print_ref_footer(registry, doc.metadata.arxiv_id)
         else:
@@ -123,13 +150,14 @@ def read(reference: str, section: str | None, no_refs: bool):
                 console.print(f"  {'  ' * (s.level - 1)}{s.heading}")
             raise SystemExit(1)
     else:
-        render_full(doc, refs=not no_refs)
+        render_full(doc, refs=not no_refs, show_header=show_header)
 
 
 @cli.command()
 @click.argument("reference")
 @click.option("--no-refs", is_flag=True, default=False, help="Hide [ref=...] annotations.")
-def outline(reference: str, no_refs: bool):
+@click.pass_context
+def outline(ctx, reference: str, no_refs: bool):
     """Show paper outline/table of contents.
 
     REFERENCE: arxiv ID or URL (e.g., 2301.12345)
@@ -140,7 +168,8 @@ def outline(reference: str, no_refs: bool):
         console.print(f"[red]Error: {e}[/red]")
         raise SystemExit(1)
 
-    render_outline(doc, refs=not no_refs)
+    show_header = not ctx.obj.get("no_header", False)
+    render_outline(doc, refs=not no_refs, show_header=show_header)
 
 
 @cli.command()
@@ -148,7 +177,8 @@ def outline(reference: str, no_refs: bool):
 @click.option("--lines", "-n", default=2, help="Number of sentences per section.")
 @click.option("--level", "-l", default=None, type=int, help="Max heading level to show.")
 @click.option("--no-refs", is_flag=True, default=False, help="Hide [ref=...] annotations.")
-def skim(reference: str, lines: int, level: int | None, no_refs: bool):
+@click.pass_context
+def skim(ctx, reference: str, lines: int, level: int | None, no_refs: bool):
     """Skim a paper (headings + first N sentences).
 
     REFERENCE: arxiv ID or URL (e.g., 2301.12345)
@@ -159,7 +189,8 @@ def skim(reference: str, lines: int, level: int | None, no_refs: bool):
         console.print(f"[red]Error: {e}[/red]")
         raise SystemExit(1)
 
-    render_skim(doc, num_lines=lines, max_level=level, refs=not no_refs)
+    show_header = not ctx.obj.get("no_header", False)
+    render_skim(doc, num_lines=lines, max_level=level, refs=not no_refs, show_header=show_header)
 
 
 @cli.command()
@@ -167,7 +198,8 @@ def skim(reference: str, lines: int, level: int | None, no_refs: bool):
 @click.argument("query")
 @click.option("--context", "-c", default=2, help="Lines of context around matches.")
 @click.option("--no-refs", is_flag=True, default=False, help="Hide [ref=...] annotations.")
-def search(reference: str, query: str, context: int, no_refs: bool):
+@click.pass_context
+def search(ctx, reference: str, query: str, context: int, no_refs: bool):
     """Search for keywords in a paper.
 
     REFERENCE: arxiv ID or URL (e.g., 2301.12345)
@@ -179,13 +211,15 @@ def search(reference: str, query: str, context: int, no_refs: bool):
         console.print(f"[red]Error: {e}[/red]")
         raise SystemExit(1)
 
-    render_search_results(doc, query, context_lines=context, refs=not no_refs)
+    show_header = not ctx.obj.get("no_header", False)
+    render_search_results(doc, query, context_lines=context, refs=not no_refs, show_header=show_header)
 
 
 @cli.command()
 @click.argument("reference")
 @click.option("--no-refs", is_flag=True, default=False, help="Hide [ref=...] annotations.")
-def info(reference: str, no_refs: bool):
+@click.pass_context
+def info(ctx, reference: str, no_refs: bool):
     """Show paper metadata.
 
     REFERENCE: arxiv ID or URL (e.g., 2301.12345)
@@ -196,7 +230,8 @@ def info(reference: str, no_refs: bool):
         console.print(f"[red]Error: {e}[/red]")
         raise SystemExit(1)
 
-    render_header(doc)
+    if not ctx.obj.get("no_header", False):
+        render_header(doc)
     console.print(f"  Sections: {len(doc.sections)}")
     console.print(f"  Pages: {len(doc.pages)}")
     total_sentences = sum(len(s.sentences) for s in doc.sections)
@@ -208,7 +243,8 @@ def info(reference: str, no_refs: bool):
 @cli.command()
 @click.argument("reference")
 @click.argument("ref_id")
-def goto(reference: str, ref_id: str):
+@click.pass_context
+def goto(ctx, reference: str, ref_id: str):
     """Jump to a reference shown in paper output.
 
     REFERENCE: arxiv ID or URL (e.g., 2301.12345)
@@ -227,7 +263,8 @@ def goto(reference: str, ref_id: str):
         console.print(f"[red]Error: {e}[/red]")
         raise SystemExit(1)
 
-    if not render_goto(doc, ref_id):
+    show_header = not ctx.obj.get("no_header", False)
+    if not render_goto(doc, ref_id, show_header=show_header):
         raise SystemExit(1)
 
 
@@ -252,7 +289,8 @@ def _load_with_layout(reference: str):
 @cli.command()
 @click.argument("reference")
 @click.option("--force", is_flag=True, default=False, help="Re-run detection even if cached.")
-def detect(reference: str, force: bool):
+@click.pass_context
+def detect(ctx, reference: str, force: bool):
     """Run layout detection (figures, tables, equations) on a paper.
 
     REFERENCE: arxiv ID or URL (e.g., 2301.12345)
@@ -272,7 +310,8 @@ def detect(reference: str, force: bool):
     elements = detect_layout(arxiv_id, pdf_path, force=force)
     doc.layout_elements = elements
 
-    render_header(doc)
+    if not ctx.obj.get("no_header", False):
+        render_header(doc)
     figs = sum(1 for e in elements if e.kind == "figure")
     tabs = sum(1 for e in elements if e.kind == "table")
     eqs = sum(1 for e in elements if e.kind == "equation")
@@ -283,7 +322,8 @@ def detect(reference: str, force: bool):
 
 @cli.command()
 @click.argument("reference")
-def figures(reference: str):
+@click.pass_context
+def figures(ctx, reference: str):
     """List detected figures in a paper.
 
     REFERENCE: arxiv ID or URL (e.g., 2301.12345)
@@ -299,12 +339,14 @@ def figures(reference: str):
         console.print(f"[red]Error: {e}[/red]")
         raise SystemExit(1)
 
-    render_layout_list(doc, kind="figure")
+    show_header = not ctx.obj.get("no_header", False)
+    render_layout_list(doc, kind="figure", show_header=show_header)
 
 
 @cli.command()
 @click.argument("reference")
-def tables(reference: str):
+@click.pass_context
+def tables(ctx, reference: str):
     """List detected tables in a paper.
 
     REFERENCE: arxiv ID or URL (e.g., 2301.12345)
@@ -320,12 +362,14 @@ def tables(reference: str):
         console.print(f"[red]Error: {e}[/red]")
         raise SystemExit(1)
 
-    render_layout_list(doc, kind="table")
+    show_header = not ctx.obj.get("no_header", False)
+    render_layout_list(doc, kind="table", show_header=show_header)
 
 
 @cli.command()
 @click.argument("reference")
-def equations(reference: str):
+@click.pass_context
+def equations(ctx, reference: str):
     """List detected equations in a paper.
 
     REFERENCE: arxiv ID or URL (e.g., 2301.12345)
@@ -341,7 +385,8 @@ def equations(reference: str):
         console.print(f"[red]Error: {e}[/red]")
         raise SystemExit(1)
 
-    render_layout_list(doc, kind="equation")
+    show_header = not ctx.obj.get("no_header", False)
+    render_layout_list(doc, kind="equation", show_header=show_header)
 
 
 # --- Highlight helpers ---
@@ -383,7 +428,8 @@ def highlight():
 @click.argument("reference")
 @click.argument("query")
 @click.option("--context", "-c", default=2, help="Lines of context around matches.")
-def highlight_search(reference: str, query: str, context: int):
+@click.pass_context
+def highlight_search(ctx, reference: str, query: str, context: int):
     """Search for text in a paper's PDF.
 
     REFERENCE: arxiv ID or URL (e.g., 2301.12345)
@@ -398,7 +444,8 @@ def highlight_search(reference: str, query: str, context: int):
         raise SystemExit(1)
 
     matches = search_pdf(pdf, query)
-    render_highlight_matches(matches, query, doc)
+    show_header = not ctx.obj.get("no_header", False)
+    render_highlight_matches(matches, query, doc, show_header=show_header)
 
 
 DEFAULT_MATCH_RANGE = 20
@@ -519,7 +566,8 @@ def highlight_add(reference: str, query: str, color: str, note: str, return_json
 
 @highlight.command("list")
 @click.argument("reference")
-def highlight_list(reference: str):
+@click.pass_context
+def highlight_list(ctx, reference: str):
     """List highlights for a paper.
 
     REFERENCE: arxiv ID or URL (e.g., 2301.12345)
@@ -533,7 +581,8 @@ def highlight_list(reference: str):
         raise SystemExit(1)
 
     highlights = storage.load_highlights(arxiv_id)
-    render_highlight_list(highlights, doc)
+    show_header = not ctx.obj.get("no_header", False)
+    render_highlight_list(highlights, doc, show_header=show_header)
 
 
 @highlight.command("remove")
