@@ -394,6 +394,7 @@ def render_section(section: Section, show_heading: bool = True, refs: bool = Tru
     sentences = section.sentences
     total = len(sentences)
     truncated = False
+    unit = "sentences"
 
     if max_lines and total > max_lines:
         sentences = sentences[:max_lines]
@@ -411,6 +412,7 @@ def render_section(section: Section, show_heading: bool = True, refs: bool = Tru
         # Fall back to raw content if no sentences parsed
         lines = [l.strip() for l in section.content.split("\n") if l.strip()]
         total = len(lines)
+        unit = "lines"
         if max_lines and total > max_lines:
             lines = lines[:max_lines]
             truncated = True
@@ -424,13 +426,18 @@ def render_section(section: Section, show_heading: bool = True, refs: bool = Tru
 
     if truncated:
         id_hint = f" {paper_id}" if paper_id else ""
-        console.print(f"[dim]Showing {max_lines} of {total} sentences. "
+        console.print(f"[dim]Showing {max_lines} of {total} {unit}. "
                       f"Use: paper read{id_hint} \"{section.heading}\" --max-lines 0[/dim]")
         console.print()
 
 
 def render_full(doc: Document, refs: bool = True, show_header: bool = True) -> None:
-    """Print the full paper."""
+    """Print the full paper.
+
+    Note: max_lines is intentionally not applied here — ``paper read <ref>``
+    without a section name is an explicit "show everything" request.
+    Truncation only applies to single-section reads via ``paper read <ref> "section"``.
+    """
     if show_header:
         render_header(doc)
 

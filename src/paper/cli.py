@@ -95,9 +95,12 @@ def _find_section(doc, section_name: str):
 def cli(ctx, no_header: bool, include_header: bool):
     """paper - A CLI for reading, skimming, and searching academic papers."""
     ctx.ensure_object(dict)
+    if no_header and include_header:
+        raise click.UsageError("Options --no-header and --include-header are mutually exclusive.")
     ctx.obj["no_header"] = no_header
     if include_header:
         _renderer._force_header = True
+        ctx.call_on_close(lambda: setattr(_renderer, "_force_header", False))
 
 
 DEFAULT_MAX_LINES = 50

@@ -176,7 +176,9 @@ def was_header_shown_recently(paper_id: str) -> bool:
 def mark_header_shown(paper_id: str) -> None:
     """Record that the header was displayed for this paper."""
     ensure_dirs()
-    _LAST_HEADER_PATH.write_text(json.dumps({
+    tmp = _LAST_HEADER_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps({
         "paper_id": paper_id,
         "timestamp": time.time(),
     }))
+    tmp.rename(_LAST_HEADER_PATH)
