@@ -13,6 +13,13 @@ Building the infra for **Claude Code-native deep research** —<br>
 
 ---
 
+<p align="center">
+  <video src="https://github.com/user-attachments/assets/50779d8a-a822-4b82-b752-0772c664bf86" width="720" autoplay loop muted></video>
+</p>
+
+<!-- Demo video rendered with Remotion on the feat/demo-gif branch.
+     See: https://github.com/collaborative-deep-research/agent-papers-cli/tree/feat/demo-gif/demo -->
+
 **agent-papers-cli** gives your AI agents (and you) the ability to read academic papers, search Google, Google Scholar, Semantic Scholar, PubMed, and browse webpages — all from the command line. Two CLI tools work together: `paper` for reading and navigating PDFs, and `paper-search` for querying search engines and academic databases.
 
 Designed as building blocks for agentic research workflows, these tools let agents autonomously discover papers, read them in depth, follow citation graphs, and verify claims. The repo includes four [Claude Code skills](#agent-skills) that orchestrate multi-step research tasks like deep-dive investigations, systematic literature reviews, and fact-checking.
