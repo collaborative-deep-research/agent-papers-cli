@@ -13,6 +13,7 @@ GREEN='\033[0;32m'
 WHITE='\033[1;37m'
 MAGENTA='\033[0;35m'
 RED='\033[0;31m'
+BLUE='\033[0;34m'
 RESET='\033[0m'
 
 # Helper: print a tool call line
@@ -22,13 +23,16 @@ dim() { echo -e "  ${DIM}$1${RESET}"; }
 # Helper: agent narration
 narrate() { echo -e "  $1"; echo ""; }
 
-# ── Claude Code chrome ──
+# ── Claude Code splash ──
 echo ""
-echo -e "${DIM}╭──────────────────────────────────────────────────────────────╮${RESET}"
-echo -e "${DIM}│${RESET} ${MAGENTA}◆${RESET} ${BOLD}Claude Code${RESET}                                                ${DIM}│${RESET}"
-echo -e "${DIM}╰──────────────────────────────────────────────────────────────╯${RESET}"
+echo -e "  ${MAGENTA}  ✻${RESET}"
+echo -e "  ${MAGENTA}  |${RESET}"
+echo -e "  ${MAGENTA} ▟█▙${RESET}     ${BOLD}Claude Code${RESET} v2.1.49"
+echo -e "  ${MAGENTA}▐▛███▜▌${RESET}   ${DIM}Opus 4.6 · Unlimited usage${RESET}"
+echo -e "  ${MAGENTA}▝▜█████▛▘${RESET}  ${DIM}~/agent-papers-cli${RESET}"
+echo -e "  ${MAGENTA} ▘▘ ▝▝${RESET}"
 echo ""
-sleep 0.5
+sleep 1.2
 
 # ── User prompt ──
 echo -e "${BOLD}${WHITE}>${RESET} ${BOLD}/deep-research find me papers about test time training${RESET}"

@@ -10,7 +10,7 @@ export const Transition: React.FC = () => {
   return (
     <AbsoluteFill
       style={{
-        backgroundColor: "#1e1e2e",
+        backgroundColor: "#eceff4",
         justifyContent: "center",
         alignItems: "center",
         fontFamily: "monospace",
@@ -19,14 +19,14 @@ export const Transition: React.FC = () => {
     >
       <div
         style={{
-          fontSize: 36,
-          color: "#cdd6f4",
+          fontSize: 44,
+          color: "#2e3440",
           textAlign: "center",
           lineHeight: 1.6,
         }}
       >
         Now let your{" "}
-        <span style={{ color: "#a6e3a1", fontWeight: "bold" }}>agent</span>{" "}
+        <span style={{ color: "#a3be8c", fontWeight: "bold" }}>agent</span>{" "}
         do it.
       </div>
     </AbsoluteFill>

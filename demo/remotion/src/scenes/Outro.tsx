@@ -4,38 +4,53 @@ export const Outro: React.FC = () => {
   const frame = useCurrentFrame();
   const opacity = interpolate(frame, [0, 20], [0, 1], { extrapolateRight: "clamp" });
 
+  const lineStyle: React.CSSProperties = {
+    fontSize: 24,
+    display: "flex",
+    alignItems: "center",
+    gap: 16,
+    marginBottom: 24,
+  };
+
   return (
     <AbsoluteFill
       style={{
-        backgroundColor: "#1e1e2e",
+        backgroundColor: "#eceff4",
         justifyContent: "center",
         alignItems: "center",
         fontFamily: "monospace",
         opacity,
       }}
     >
-      <div style={{ textAlign: "center" }}>
+      <div>
+        {/* Title */}
         <div
           style={{
-            fontSize: 28,
-            color: "#cdd6f4",
+            fontSize: 42,
+            color: "#2e3440",
             fontWeight: "bold",
-            marginBottom: 32,
+            marginBottom: 48,
           }}
         >
           agent-papers-cli
         </div>
 
-        <div style={{ fontSize: 18, color: "#89b4fa", marginBottom: 16 }}>
-          pip install agent-papers-cli
+        {/* pip install */}
+        <div style={{ ...lineStyle, color: "#5e81ac" }}>
+          <span style={{ fontSize: 28 }}>📦</span>
+          <span>pip install agent-papers-cli</span>
         </div>
 
-        <div style={{ fontSize: 16, color: "#a6e3a1", marginBottom: 24 }}>
-          npx skills add collaborative-deep-research/agent-papers-cli
+        {/* skills add */}
+        <div style={{ ...lineStyle, color: "#a3be8c" }}>
+          <span style={{ fontSize: 28 }}>🧩</span>
+          <span>npx skills add collaborative-deep-research/agent-papers-cli</span>
         </div>
 
-        <div style={{ fontSize: 14, color: "#6c7086" }}>
-          github.com/collaborative-deep-research/agent-papers-cli
+        {/* GitHub */}
+        <div style={{ ...lineStyle, color: "#4c566a" }}>
+          <span style={{ fontSize: 28 }}>⭐</span>
+          <span>github.com/collaborative-deep-research/agent-papers-cli</span>
         </div>
       </div>
     </AbsoluteFill>

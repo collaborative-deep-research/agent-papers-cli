@@ -8,15 +8,19 @@
 
 # --- Settings ---
 Output demo/clips/claude-code.mp4
-Set FontSize 14
-Set Width 1200
-Set Height 700
-Set Theme "Catppuccin Mocha"
+Set FontSize 18
+Set Width 1920
+Set Height 1080
+Set Theme "nord-light"
 Set TypingSpeed 35ms
 Set Padding 20
 Set Framerate 30
 
+# Let the terminal settle before typing
+Sleep 1.5s
+
 # Run the simulation
-Type "bash demo/simulate-claude-code.sh"
+Type "bash demo/run-claude-code.sh"
+Sleep 0.3s
 Enter
 Sleep 30s

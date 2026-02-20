@@ -7,7 +7,7 @@ Output demo/readme.gif
 Set FontSize 14
 Set Width 1200
 Set Height 700
-Set Theme "Catppuccin Mocha"
+Set Theme "nord-light"
 Set TypingSpeed 40ms
 Set Padding 20
 Set Framerate 24

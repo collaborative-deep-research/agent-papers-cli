@@ -12,7 +12,7 @@ export const Intro: React.FC = () => {
   return (
     <AbsoluteFill
       style={{
-        backgroundColor: "#1e1e2e",
+        backgroundColor: "#eceff4",
         justifyContent: "center",
         alignItems: "center",
         fontFamily: "monospace",
@@ -22,9 +22,9 @@ export const Intro: React.FC = () => {
         style={{
           opacity: titleOpacity,
           transform: `translateY(${titleY}px)`,
-          fontSize: 48,
+          fontSize: 56,
           fontWeight: "bold",
-          color: "#cdd6f4",
+          color: "#2e3440",
           marginBottom: 24,
         }}
       >
@@ -33,14 +33,14 @@ export const Intro: React.FC = () => {
       <div
         style={{
           opacity: taglineOpacity,
-          fontSize: 22,
-          color: "#a6adc8",
+          fontSize: 28,
+          color: "#4c566a",
           textAlign: "center",
           lineHeight: 1.6,
         }}
       >
         Building the infra for{" "}
-        <span style={{ color: "#89b4fa", fontWeight: "bold" }}>
+        <span style={{ color: "#5e81ac", fontWeight: "bold" }}>
           Claude Code-native deep research
         </span>
       </div>
