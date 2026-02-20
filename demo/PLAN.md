@@ -32,17 +32,15 @@ Final MP4 + README GIF
 
 The video has a clear narrative arc: **"Here are the tools → Watch your agent use them"**
 
-### Act 1: CLI Features (~60-90 sec)
+### Act 1: CLI Features (~25 sec)
 
-Five scenes, each demonstrating a capability:
+Three scenes showcasing core features:
 
 | Scene | What it shows | Commands | Connection to Act 2 |
 |-------|--------------|----------|---------------------|
-| 1. Navigate | Paper structure | `outline`, `skim`, `read "Architecture"` | Agent will outline → read to understand a paper |
-| 2. Search & discover | Finding content | `search "attention"`, `goto c3`, `goto e1` | Agent will search + follow citations |
-| 3. Literature search | Finding papers | `google scholar`, `semanticscholar papers`, `details` | Agent will search for related work |
-| 4. Layout detection | Figures & tables | `figures`, `goto f1` | Agent can inspect visual elements |
-| 5. Highlights | Annotate | `highlight search`, `highlight add` | Agent can mark important findings |
+| 1. Navigate | Paper structure | `outline`, `read "Architecture"` | Agent will outline → read to understand a paper |
+| 2. Search within | Finding content | `search "attention"`, `goto c3` | Agent will search + follow citations |
+| 3. Literature search | Finding papers | `semanticscholar papers`, `google scholar` | Agent will search for related work |
 
 ### Transition
 
@@ -104,8 +102,8 @@ vhs demo/readme.tape
 ## TODO
 
 - [ ] Replace `simulate-claude-code.sh` with a real Claude Code screen recording
-- [ ] Set up Remotion project in `demo/remotion/`
-- [ ] Add scene label overlays in Remotion
+- [x] Set up Remotion project in `demo/remotion/`
+- [x] Add scene label overlays in Remotion
 - [ ] Add callout annotations (e.g., "header auto-suppressed", "following citation")
 - [ ] Render final video
-- [ ] Embed README GIF in README.md
+- [x] Embed README GIF in README.md
