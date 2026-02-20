@@ -14,7 +14,7 @@ Building the infra for **Claude Code-native deep research** —<br>
 ---
 
 <p align="center">
-  <video src="https://github.com/user-attachments/assets/50779d8a-a822-4b82-b752-0772c664bf86" width="720" autoplay loop muted></video>
+  <video src="https://github.com/user-attachments/assets/97dab3bf-6cf8-4f81-84a7-6b21817c8164" width="720" autoplay loop muted></video>
 </p>
 
 <!-- Demo video rendered with Remotion on the feat/demo-gif branch.
