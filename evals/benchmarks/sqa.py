@@ -2,6 +2,8 @@
 
 Generates responses using Claude Code, then converts output to ASTA format
 (sections + citations) for external evaluation via ``inspect eval astabench/sqa``.
+
+Dataset: https://huggingface.co/datasets/allenai/asta-bench
 """
 
 from __future__ import annotations
@@ -10,6 +12,7 @@ import json
 import logging
 import os
 import re
+import shutil
 from typing import Any, Callable
 
 from ..common import map_with_progress
@@ -19,6 +22,25 @@ from .base import Eval
 logger = logging.getLogger(__name__)
 
 DEFAULT_SKILL = "deep-research"
+
+
+def download_sqa_dataset(
+    output_dir: str = "evals/data/sqa",
+) -> str:
+    """Download SQAv2 rubrics from HuggingFace ``allenai/asta-bench``."""
+    from huggingface_hub import hf_hub_download
+
+    output_path = os.path.join(output_dir, "rubrics_v2_recomputed.json")
+    if not os.path.exists(output_path):
+        os.makedirs(output_dir, exist_ok=True)
+        file_path = hf_hub_download(
+            repo_id="allenai/asta-bench",
+            filename="tasks/sqa/rubrics_v2_recomputed.json",
+            repo_type="dataset",
+        )
+        shutil.copy(file_path, output_path)
+        logger.info("Downloaded SQA dataset to %s", output_path)
+    return output_path
 
 
 # ---------------------------------------------------------------------------
@@ -100,12 +122,14 @@ class SQAEval(Eval):
 
     def __init__(
         self,
-        data_path: str,
+        data_path: str | None = None,
         num_examples: int | None = None,
         n_threads: int = 10,
         output_dir: str = "evals/results",
         skill: str | None = DEFAULT_SKILL,
     ):
+        if data_path is None:
+            data_path = download_sqa_dataset()
         with open(data_path) as f:
             if data_path.endswith(".jsonl"):
                 self.items = [json.loads(line) for line in f if line.strip()]

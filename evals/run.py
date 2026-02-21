@@ -56,10 +56,10 @@ def _get_benchmark(name: str, args: argparse.Namespace) -> Any:
     if name == "sqa":
         from .benchmarks.sqa import SQAEval
         data_path = getattr(args, "data_path", None)
-        if data_path is None:
-            sys.exit("Error: --data-path is required for sqa")
-        kw = dict(data_path=data_path, num_examples=num,
+        kw: dict[str, Any] = dict(num_examples=num,
                    n_threads=n_threads, output_dir=output_dir)
+        if data_path is not None:
+            kw["data_path"] = data_path
         if skill is not None:
             kw["skill"] = skill
         return SQAEval(**kw)
@@ -67,10 +67,10 @@ def _get_benchmark(name: str, args: argparse.Namespace) -> Any:
     if name == "drb":
         from .benchmarks.drb import DRBEval
         data_path = getattr(args, "data_path", None)
-        if data_path is None:
-            sys.exit("Error: --data-path is required for drb")
-        kw = dict(data_path=data_path, num_examples=num,
+        kw = dict(num_examples=num,
                    n_threads=n_threads, output_dir=output_dir)
+        if data_path is not None:
+            kw["data_path"] = data_path
         if skill is not None:
             kw["skill"] = skill
         return DRBEval(**kw)

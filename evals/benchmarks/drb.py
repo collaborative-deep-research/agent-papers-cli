@@ -2,6 +2,8 @@
 
 Generates research reports using Claude Code, then converts to DRB format
 (article + citations + deduped URLs) for external evaluation.
+
+Dataset: https://huggingface.co/datasets/rl-research/deep_research_bench_eval
 """
 
 from __future__ import annotations
@@ -19,6 +21,26 @@ from .base import Eval
 logger = logging.getLogger(__name__)
 
 DEFAULT_SKILL = "deep-research"
+
+
+def download_drb_dataset(
+    output_dir: str = "evals/data/drb",
+) -> str:
+    """Download DRB queries from HuggingFace ``rl-research/deep_research_bench_eval``."""
+    from huggingface_hub import hf_hub_download
+
+    output_path = os.path.join(output_dir, "test.jsonl")
+    if not os.path.exists(output_path):
+        os.makedirs(output_dir, exist_ok=True)
+        file_path = hf_hub_download(
+            repo_id="rl-research/deep_research_bench_eval",
+            filename="test.jsonl",
+            repo_type="dataset",
+        )
+        import shutil
+        shutil.copy(file_path, output_path)
+        logger.info("Downloaded DRB dataset to %s", output_path)
+    return output_path
 
 
 # ---------------------------------------------------------------------------
@@ -84,12 +106,14 @@ class DRBEval(Eval):
 
     def __init__(
         self,
-        data_path: str,
+        data_path: str | None = None,
         num_examples: int | None = None,
         n_threads: int = 10,
         output_dir: str = "evals/results",
         skill: str | None = DEFAULT_SKILL,
     ):
+        if data_path is None:
+            data_path = download_drb_dataset()
         with open(data_path) as f:
             if data_path.endswith(".jsonl"):
                 self.items = [json.loads(line) for line in f if line.strip()]
