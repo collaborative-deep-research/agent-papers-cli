@@ -126,6 +126,27 @@ class TestEscapeBibtex:
     def test_ampersand(self):
         assert _escape_bibtex("AT&T Labs") == r"AT\&T Labs"
 
+    def test_percent(self):
+        assert _escape_bibtex("100% accuracy") == r"100\% accuracy"
+
+    def test_dollar(self):
+        assert _escape_bibtex("$x$ variable") == r"\$x\$ variable"
+
+    def test_hash(self):
+        assert _escape_bibtex("item #1") == r"item \#1"
+
+    def test_underscore(self):
+        assert _escape_bibtex("var_name") == r"var\_name"
+
+    def test_tilde(self):
+        assert _escape_bibtex("~approx") == r"\~{}approx"
+
+    def test_caret(self):
+        assert _escape_bibtex("x^2") == r"x\^{}2"
+
+    def test_multiple_specials(self):
+        assert _escape_bibtex("A & B % C") == r"A \& B \% C"
+
     def test_no_special(self):
         assert _escape_bibtex("plain text") == "plain text"
 
@@ -256,6 +277,15 @@ class TestFetchArxivMetadata:
         assert meta.month == "06"
         assert "dominant sequence" in meta.abstract
         assert meta.doi == "10.5555/3295222"
+
+    @patch("paper.bibtex.httpx.get")
+    def test_network_error_returns_fallback(self, mock_get):
+        import httpx as _httpx
+
+        mock_get.side_effect = _httpx.ConnectError("timeout")
+        meta = fetch_arxiv_metadata("1706.03762")
+        assert meta.arxiv_id == "1706.03762"
+        assert meta.title == ""
 
     @patch("paper.bibtex.httpx.get")
     def test_no_entry(self, mock_get):

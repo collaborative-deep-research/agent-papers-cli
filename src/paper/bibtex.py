@@ -105,8 +105,11 @@ _ARXIV_NS = {"atom": "http://www.w3.org/2005/Atom"}
 def fetch_arxiv_metadata(arxiv_id: str) -> BibMetadata:
     """Fetch structured metadata from the arxiv API."""
     url = f"https://export.arxiv.org/api/query?id_list={arxiv_id}&max_results=1"
-    resp = httpx.get(url, timeout=TIMEOUT, follow_redirects=True)
-    resp.raise_for_status()
+    try:
+        resp = httpx.get(url, timeout=TIMEOUT, follow_redirects=True)
+        resp.raise_for_status()
+    except httpx.HTTPError:
+        return BibMetadata(arxiv_id=arxiv_id)
 
     root = ET.fromstring(resp.text)
     entry = root.find("atom:entry", _ARXIV_NS)
@@ -372,10 +375,18 @@ def enrich_metadata(doc) -> BibMetadata:
 
 
 def _escape_bibtex(s: str) -> str:
-    """Escape special characters for BibTeX values."""
-    # BibTeX special chars: & % $ # _ { } ~ ^
-    # We wrap values in braces so most are fine, but & needs escaping
-    return s.replace("&", r"\&")
+    """Escape special characters for BibTeX/LaTeX values."""
+    _BIBTEX_SPECIALS = {
+        "&": r"\&",
+        "%": r"\%",
+        "$": r"\$",
+        "#": r"\#",
+        "_": r"\_",
+        "~": r"\~{}",
+        "^": r"\^{}",
+    }
+    # Note: { and } are NOT escaped — they are used structurally in BibTeX values
+    return re.sub(r"[&%$#_~^]", lambda m: _BIBTEX_SPECIALS[m.group()], s)
 
 
 def format_bibtex(meta: BibMetadata) -> str:

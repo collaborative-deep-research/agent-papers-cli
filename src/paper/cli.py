@@ -255,6 +255,7 @@ def bibtex(ctx, reference: str, force: bool):
 
     Results are cached. Use --force to re-fetch.
     """
+    from paper import storage
     from paper.bibtex import generate_bibtex
 
     try:
@@ -275,7 +276,7 @@ def bibtex(ctx, reference: str, force: bool):
 
     console.print(bib)
     console.print()
-    console.print(f"  [dim]Cached to ~/.papers/{arxiv_id}/bibtex.bib[/dim]")
+    console.print(f"  [dim]Cached to {storage.bibtex_path(arxiv_id)}[/dim]")
     console.print()
 
 
