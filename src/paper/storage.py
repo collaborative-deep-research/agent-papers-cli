@@ -130,6 +130,10 @@ def list_papers() -> dict[str, str]:
     return {}
 
 
+def bibtex_path(paper_id: str) -> Path:
+    return paper_dir(paper_id) / "bibtex.bib"
+
+
 def layout_path(paper_id: str) -> Path:
     return paper_dir(paper_id) / "layout.json"
 

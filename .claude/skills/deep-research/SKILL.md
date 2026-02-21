@@ -56,6 +56,7 @@ Combine findings into a structured report with:
 - Areas of agreement/disagreement
 - Gaps in the literature
 - Citations for all claims (include paper titles and URLs)
+- BibTeX entries for key papers (use `paper bibtex <arxiv_id>` to generate)
 
 ## Guidelines
 

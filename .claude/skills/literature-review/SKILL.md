@@ -68,6 +68,7 @@ Organize findings **by theme, not by paper**. Include:
 - Main results and findings
 - Open questions and future directions
 - Complete reference list with paper IDs and URLs
+- BibTeX entries for all cited papers (use `paper bibtex <arxiv_id>` to generate)
 
 ## Guidelines
 
