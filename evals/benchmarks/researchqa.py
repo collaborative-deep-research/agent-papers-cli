@@ -45,23 +45,48 @@ class ResearchQAItem:
 
 
 def download_researchqa_dataset(
-    split: str = "test.json",
     output_dir: str = "evals/data/researchqa",
 ) -> str:
-    """Download the ResearchQA dataset from HuggingFace."""
+    """Download the ResearchQA test split and official subset IDs from HuggingFace.
+
+    Returns path to the filtered JSON file (official subset only, ~100 examples).
+    """
     from huggingface_hub import hf_hub_download
 
-    output_path = os.path.join(output_dir, split)
-    if not os.path.exists(output_path):
-        os.makedirs(output_dir, exist_ok=True)
-        file_path = hf_hub_download(
-            repo_id="realliyifei/ResearchQA",
-            filename=split,
-            repo_type="dataset",
-            revision="87cdd81df0c5ea96de293859233e8e64dac3d168",
-        )
-        shutil.copy(file_path, output_path)
-    return output_path
+    filtered_path = os.path.join(output_dir, "test_official.json")
+    if os.path.exists(filtered_path):
+        return filtered_path
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Download full test split.
+    test_file = hf_hub_download(
+        repo_id="realliyifei/ResearchQA",
+        filename="test.json",
+        repo_type="dataset",
+        revision="87cdd81df0c5ea96de293859233e8e64dac3d168",
+    )
+
+    # Download official subset IDs (matches DR-Tulu's eval set).
+    ids_file = hf_hub_download(
+        repo_id="rl-research/researchqa_official_subset_ids",
+        filename="researchqa_official_subset_ids.json",
+        repo_type="dataset",
+    )
+    with open(ids_file) as f:
+        official_ids = set(json.load(f))
+
+    # Filter to official subset.
+    with open(test_file, encoding="utf-8") as f:
+        all_items = json.load(f)
+    filtered = [item for item in all_items if item["id"] in official_ids]
+
+    with open(filtered_path, "w", encoding="utf-8") as f:
+        json.dump(filtered, f, ensure_ascii=False)
+
+    logger.info("Downloaded ResearchQA: %d / %d examples (official subset)",
+                len(filtered), len(all_items))
+    return filtered_path
 
 
 def load_researchqa_data(json_path: str) -> list[ResearchQAItem]:
