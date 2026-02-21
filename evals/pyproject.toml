@@ -9,6 +9,7 @@ dependencies = [
     "tqdm>=4.0",
     "tenacity>=8.0",
     "huggingface-hub>=0.20",
+    "datasets>=2.14",
     "httpx>=0.27",
     "numpy>=1.24",
 ]

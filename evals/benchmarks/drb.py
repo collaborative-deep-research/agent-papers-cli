@@ -26,20 +26,30 @@ DEFAULT_SKILL = "deep-research"
 def download_drb_dataset(
     output_dir: str = "evals/data/drb",
 ) -> str:
-    """Download DRB queries from HuggingFace ``rl-research/deep_research_bench_eval``."""
-    from huggingface_hub import hf_hub_download
+    """Download DRB queries from HuggingFace ``rl-research/deep_research_bench_eval``.
+
+    Uses the ``datasets`` library (like DR-Tulu) since this repo is a
+    proper HF dataset with a ``test`` split, not a raw file.
+    """
+    import datasets as hf_datasets
 
     output_path = os.path.join(output_dir, "test.jsonl")
     if not os.path.exists(output_path):
         os.makedirs(output_dir, exist_ok=True)
-        file_path = hf_hub_download(
-            repo_id="rl-research/deep_research_bench_eval",
-            filename="test.jsonl",
-            repo_type="dataset",
+        data = hf_datasets.load_dataset(
+            "rl-research/deep_research_bench_eval", split="test",
         )
-        import shutil
-        shutil.copy(file_path, output_path)
-        logger.info("Downloaded DRB dataset to %s", output_path)
+        items = []
+        for sample in data:
+            items.append({
+                "id": sample["id"],
+                "problem": sample["prompt"],
+            })
+        with open(output_path, "w") as f:
+            for item in items:
+                f.write(json.dumps(item) + "\n")
+        logger.info("Downloaded DRB dataset: %d examples to %s",
+                    len(items), output_path)
     return output_path
 
 
