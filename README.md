@@ -50,6 +50,8 @@ paper read <ref> [section]             # Read full paper or specific section (de
 paper skim <ref> --lines N --level L   # Headings + first N sentences
 paper search <ref> "query"             # Keyword search with context
 paper info <ref>                       # Show metadata
+paper bibtex <ref>                     # Generate BibTeX entry (enriched from arxiv, S2, Crossref)
+  [--force]                            # Re-fetch from APIs (ignore cache)
 paper goto <ref> <ref_id>              # Jump to a section, link, or citation
 
 # Layout detection (requires `pip install paper-cli[layout]`)
@@ -262,10 +264,29 @@ paper goto 2302.13971 eq3   # equation 3
 
 Detection uses [DocLayout-YOLO](https://github.com/opendatalab/DocLayout-YOLO) trained on DocStructBench (10 categories including figures, tables, and formulas). Model weights are from our [pinned fork](https://huggingface.co/collab-dr/DocLayout-YOLO-DocStructBench). Supports CUDA, MPS (Apple Silicon), and CPU. Running `paper figures` etc. triggers detection lazily on first use — subsequent calls use the cached result. Each detected element is cropped as a PNG screenshot to `~/.papers/<id>/layout/` (e.g., `f1.png`, `t2.png`, `eq3.png`).
 
+### Generate BibTeX entries
+
+```bash
+paper bibtex 1706.03762
+```
+```
+@inproceedings{vaswani2017attention,
+  title = {Attention Is All You Need},
+  author = {Ashish Vaswani and Noam Shazeer and ...},
+  year = {2017},
+  booktitle = {Advances in Neural Information Processing Systems},
+  doi = {10.5555/3295222.3295349},
+  ...
+}
+```
+
+BibTeX generation enriches metadata from multiple sources: the **arxiv API** (title, authors, year, abstract), **Semantic Scholar** (venue, DOI), and **Crossref** (volume, pages, publisher). If a paper was published at a conference or journal, the entry is automatically normalized from `@misc` (arxiv preprint) to `@inproceedings` or `@article` with the venue name — similar to [rebiber](https://github.com/yuchenlin/rebiber). Results are cached in `~/.papers/<id>/bibtex.bib`; use `--force` to re-fetch.
+
 ## Architecture
 
 ```
 src/paper/                         # paper CLI
+├── bibtex.py      # BibTeX generation: multi-source enrichment (arxiv, S2, Crossref), formatting
 ├── cli.py         # Click CLI — all commands defined here
 ├── fetcher.py     # Downloads PDFs from arxiv, manages cache
 ├── highlighter.py # PDF text search, coordinate conversion, highlight CRUD, PDF annotation
@@ -367,6 +388,7 @@ paper goto 2302.13971 f1             # jump to figure 1
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PAPER_DOWNLOAD_TIMEOUT` | `120` | Download timeout in seconds |
+| `PAPER_BIBTEX_TIMEOUT` | `15` | Timeout for BibTeX API calls (arxiv, S2, Crossref) |
 | `SERPER_API_KEY` | — | Google search and scraping via Serper.dev |
 | `S2_API_KEY` | — | Semantic Scholar API (optional, increases rate limits) |
 | `JINA_API_KEY` | — | Jina Reader for webpage content extraction |
