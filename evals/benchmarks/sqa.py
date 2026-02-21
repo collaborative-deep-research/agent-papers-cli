@@ -3,6 +3,10 @@
 Generates responses using Claude Code, then converts output to ASTA format
 (sections + citations) for external evaluation via ``inspect eval astabench/sqa``.
 
+When ``<cite>`` tags are present (via ``--cite-style``), the converter extracts
+snippet content from tool call traces and includes ``title`` / ``snippets``
+fields in each citation — matching DR-Tulu's ``convert_to_asta_format.py``.
+
 Dataset: https://huggingface.co/datasets/allenai/asta-bench
 """
 
@@ -15,6 +19,7 @@ import re
 import shutil
 from typing import Any, Callable
 
+from ..compat import build_full_traces, build_snippet_map, extract_snippet_text
 from ..common import map_with_progress
 from ..types import SingleEvalResult
 from .base import Eval
@@ -67,8 +72,20 @@ def _change_citations_asta_format(text: str) -> tuple[str, list[str]]:
     return new_text, citation_ids
 
 
-def _parse_answer_to_sections(response_text: str) -> list[dict[str, Any]]:
-    """Parse a response into ASTA sections with citations."""
+def _parse_answer_to_sections(
+    response_text: str,
+    snippet_map: dict[str, dict[str, str]] | None = None,
+) -> list[dict[str, Any]]:
+    """Parse a response into ASTA sections with citations.
+
+    If *snippet_map* is provided (built from tool call traces), each citation
+    includes ``title`` and ``snippets`` fields for richer ASTA output.
+    """
+    # Strip <answer> wrapper if present
+    answer_match = re.search(r"<answer>(.*?)</answer>", response_text, re.DOTALL)
+    if answer_match:
+        response_text = answer_match.group(1).strip()
+
     raw_parts = response_text.strip().split("\n\n")
     merged: list[str] = []
     current: str | None = None
@@ -90,6 +107,7 @@ def _parse_answer_to_sections(response_text: str) -> list[dict[str, Any]]:
         if not (s.strip().startswith("#") and len(s.strip().split("\n")) == 1)
     ]
 
+    snippet_map = snippet_map or {}
     sections = []
     for section_text in merged:
         title_match = re.match(r"#+\s*([^\n]*)", section_text)
@@ -101,7 +119,16 @@ def _parse_answer_to_sections(response_text: str) -> list[dict[str, Any]]:
             body = section_text.strip()
 
         clean_text, citation_ids = _change_citations_asta_format(body)
-        section_citations = [{"id": f"[{cid}]"} for cid in set(citation_ids)]
+
+        # Build citation entries — include title/snippets when available
+        section_citations = []
+        for cid in set(citation_ids):
+            entry: dict[str, Any] = {"id": f"[{cid}]"}
+            info = snippet_map.get(cid)
+            if info:
+                entry["title"] = info.get("Title", "")
+                entry["snippets"] = [info.get("Snippet", "")]
+            section_citations.append(entry)
 
         sections.append({
             "title": title,
@@ -167,7 +194,17 @@ class SQAEval(Eval):
         asta_rows = []
         results = []
         for i, gen in enumerate(generation_data):
-            sections = _parse_answer_to_sections(gen["response_text"])
+            # Build snippet map from tool call traces (if available)
+            claude = gen.get("claude", {})
+            trajectory = claude.get("trajectory", [])
+            snippet_map: dict[str, dict[str, str]] = {}
+            if trajectory:
+                full_traces = build_full_traces(trajectory, claude.get("usage"))
+                snippet_map = build_snippet_map(full_traces)
+
+            sections = _parse_answer_to_sections(
+                gen["response_text"], snippet_map=snippet_map,
+            )
             asta_rows.append({
                 "question": gen["question"],
                 "response": {"sections": sections},

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import re
+import uuid
 
 from rich.console import Console
 from rich.text import Text
@@ -10,6 +12,29 @@ from rich.text import Text
 from search.models import BrowseResult, CitationResult, SearchResult, SnippetResult
 
 console = Console()
+
+# Set PAPER_SEARCH_HASH_IDS=1 to use deterministic hash-based reference IDs
+# (8-char UUID5 from URL) instead of sequential r1, s1, etc.  Hash IDs are
+# unique across multiple searches, which is required for citation tracing in
+# the eval harness.
+_USE_HASH_IDS = os.environ.get("PAPER_SEARCH_HASH_IDS", "") == "1"
+
+
+def _url_to_snippet_id(url: str) -> str:
+    """Deterministic short snippet ID from a URL (8-char UUID5 prefix)."""
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, url))[:8]
+
+
+def _make_ref_id(url: str, fallback_index: int, prefix: str = "r") -> str:
+    """Generate a reference ID for a search result.
+
+    When ``PAPER_SEARCH_HASH_IDS=1``, uses a deterministic hash of the URL
+    so the same source always gets the same ID across searches.  Otherwise
+    returns the classic sequential ``{prefix}{index}`` format.
+    """
+    if _USE_HASH_IDS and url:
+        return _url_to_snippet_id(url)
+    return f"{prefix}{fallback_index}"
 
 
 def _detect_arxiv_id(url: str) -> str:
@@ -46,8 +71,14 @@ def render_search_results(
     console.print(header)
     console.print()
 
+    seen_ids: dict[str, int] = {}
     for i, r in enumerate(results, 1):
-        ref = f"r{i}"
+        ref = _make_ref_id(r.url, i, prefix="r")
+        # De-duplicate within a single call
+        count = seen_ids.get(ref, 0)
+        seen_ids[ref] = count + 1
+        if count > 0:
+            ref = f"{ref}-{count}"
         # Title line
         title_line = Text()
         title_line.append(f"[{ref}] ", style="bold cyan")
@@ -95,8 +126,17 @@ def render_snippet_results(results: list[SnippetResult]) -> None:
     console.print(f"Found {len(results)} snippets")
     console.print()
 
+    seen_ids: dict[str, int] = {}
     for i, s in enumerate(results, 1):
-        ref = f"s{i}"
+        if _USE_HASH_IDS and s.paper_id:
+            ref = _url_to_snippet_id(s.paper_id)
+        else:
+            ref = f"s{i}"
+        # De-duplicate within a single call
+        count = seen_ids.get(ref, 0)
+        seen_ids[ref] = count + 1
+        if count > 0:
+            ref = f"{ref}-{count}"
         title_line = Text()
         title_line.append(f"[{ref}] ", style="bold cyan")
         title_line.append(s.paper_title or "(untitled)", style="bold")
@@ -129,8 +169,17 @@ def render_citation_results(
     console.print(f"Found {len(results)} {direction}")
     console.print()
 
+    seen_ids: dict[str, int] = {}
     for i, c in enumerate(results, 1):
-        ref = f"c{i}"
+        if _USE_HASH_IDS and c.paper_id:
+            ref = _url_to_snippet_id(c.paper_id)
+        else:
+            ref = f"c{i}"
+        # De-duplicate within a single call
+        count = seen_ids.get(ref, 0)
+        seen_ids[ref] = count + 1
+        if count > 0:
+            ref = f"{ref}-{count}"
         title_line = Text()
         title_line.append(f"[{ref}] ", style="bold cyan")
         title_line.append(c.title or "(untitled)", style="bold")

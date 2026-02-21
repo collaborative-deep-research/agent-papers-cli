@@ -44,6 +44,37 @@ python -m evals.run run -b sqa --data-path path/to/sqa.jsonl -n 10
 python -m evals.run run -b drb --data-path path/to/drb.jsonl -n 10
 ```
 
+## DR-Tulu Compatible Citation Mode
+
+Use `--cite-style` to enable DR-Tulu compatible `<cite>` tags in output.
+This appends citation formatting instructions to the system prompt, producing
+output that can be scored by DR-Tulu's RACE/FACT and ASTA pipelines.
+
+```bash
+# Enable citation mode (benchmark-specific default style)
+python -m evals.run run -b drb -n 5 --cite-style auto
+
+# Explicit long-form citation style
+python -m evals.run run -b researchqa -n 10 --cite-style long
+
+# Convert existing generation data to DR-Tulu format
+python -m evals.run convert -g evals/results/sonnet/deep-research/drb_gen.jsonl
+```
+
+With `--cite-style` enabled, the eval harness automatically sets
+`PAPER_SEARCH_HASH_IDS=1`, which switches search result reference IDs from
+sequential (`[r1]`, `[r2]`) to deterministic hashes (`[ddd5f455]`, `[cfda4fd6]`)
+derived from the source URL.  This ensures citation IDs are unique across
+multiple searches, so the formatter can trace each
+`<cite id="ddd5f455">claim</cite>` back to its source URL.
+
+The hash ID mode can also be enabled manually:
+
+```bash
+export PAPER_SEARCH_HASH_IDS=1
+paper-search google web "transformers"   # → [ddd5f455] Attention is All You Need
+```
+
 ## Options
 
 | Flag | Default | Description |
@@ -54,9 +85,10 @@ python -m evals.run run -b drb --data-path path/to/drb.jsonl -n 10
 | `-s, --skill` | per-benchmark | Skill slash command (`''` to disable) |
 | `--max-turns` | 15 | Max agentic turns per example |
 | `--max-budget-usd` | none | Cost cap per example |
+| `--cite-style` | none | `auto`, `long`, `short`, `exact` — enables `<cite>` tags |
 | `--grader-model` | `gpt-4.1-mini` | Grading LLM |
 | `--subset` | `all` | HealthBench: `all`, `hard`, `consensus` |
-| `--data-path` | none | Dataset path (required for sqa/drb) |
+| `--data-path` | none | Dataset path (auto-downloaded if omitted) |
 
 ## Output
 
@@ -86,9 +118,9 @@ One JSON object per example with the full research trajectory:
       {"type": "thinking", "text": "The user is asking me to..."},
       {"type": "text", "text": "I'll conduct a comprehensive..."},
       {"type": "tool_use", "name": "Bash", "input": {"command": "paper-search google web \"pyrolysis...\""}},
-      {"type": "tool_result", "content": "Found 10 results from Google\n\n[r1] Effect of..."},
+      {"type": "tool_result", "content": "Found 10 results from Google\n\n[a3b2c1d0] Effect of..."},
       {"type": "tool_use", "name": "Bash", "input": {"command": "paper-search semanticscholar papers \"biochar...\""}},
-      {"type": "tool_result", "content": "Found 10 results from Semantic Scholar\n\n[r1]..."},
+      {"type": "tool_result", "content": "Found 10 results from Semantic Scholar\n\n[ddd5f455]..."},
       ...
     ]
   }
@@ -120,18 +152,20 @@ One JSON object per example with the full research trajectory:
 
 ```
 evals/
-├── run.py           CLI entry point (generate / evaluate / run)
+├── run.py           CLI entry point (generate / evaluate / run / convert)
 ├── claude.py         run_claude() — spawns `claude -p --output-format stream-json --verbose`
+├── prompts.py        DR-Tulu compatible citation prompt templates
+├── compat.py         Output format conversion (our format → DR-Tulu format)
 ├── types.py          SingleEvalResult, EvalResult
 ├── common.py         map_with_progress, aggregate_results
 ├── graders.py        LLM grading (coverage + rubric)
 ├── tools.py          Reference docs for CLI commands
 └── benchmarks/
     ├── base.py       Abstract Eval class
-    ├── researchqa.py
-    ├── healthbench.py
-    ├── sqa.py
-    └── drb.py
+    ├── researchqa.py  Coverage scoring
+    ├── healthbench.py Rubric scoring
+    ├── sqa.py         ASTA format conversion (with snippet content)
+    └── drb.py         DRB format conversion (with URL resolution)
 ```
 
 ### How it works

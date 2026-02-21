@@ -3,6 +3,11 @@
 Generates research reports using Claude Code, then converts to DRB format
 (article + citations + deduped URLs) for external evaluation.
 
+When run with ``--cite-style`` enabled, the response contains ``<cite>`` tags
+whose IDs map to search result reference IDs (r1, s1, etc.).  The formatter
+resolves these IDs to URLs via the tool call traces, matching DR-Tulu's
+``drb_formatter.py`` output schema.
+
 Dataset: https://huggingface.co/datasets/rl-research/deep_research_bench_eval
 """
 
@@ -14,6 +19,7 @@ import os
 import re
 from typing import Any, Callable
 
+from ..compat import build_full_traces, build_snippet_map
 from ..common import map_with_progress
 from ..types import SingleEvalResult
 from .base import Eval
@@ -58,7 +64,9 @@ def download_drb_dataset(
 # ---------------------------------------------------------------------------
 
 
-def _parse_and_format_citations(text: str) -> tuple[str, list[str], dict[str, list[str]]]:
+def _parse_and_format_citations(
+    text: str,
+) -> tuple[str, list[str], dict[str, list[str]]]:
     """Parse <cite> tags, reformat to [id], extract id -> text mapping."""
     citation_ids: list[str] = []
     id_to_text: dict[str, list[str]] = {}
@@ -79,7 +87,11 @@ def _parse_and_format_citations(text: str) -> tuple[str, list[str], dict[str, li
 
 
 def _format_example(gen: dict[str, Any]) -> dict[str, Any]:
-    """Convert a single generation to DRB format."""
+    """Convert a single generation to DRB format.
+
+    If tool call traces are available (via ``claude.trajectory``), resolves
+    citation IDs to URLs for a richer output matching DR-Tulu's schema.
+    """
     item = gen["item"]
     output: dict[str, Any] = {
         "id": item.get("id") or item.get("example_id", ""),
@@ -90,13 +102,53 @@ def _format_example(gen: dict[str, Any]) -> dict[str, Any]:
     }
 
     response_text = gen.get("response_text", "")
+
+    # Strip <answer> wrapper if present
+    answer_match = re.search(r"<answer>(.*?)</answer>", response_text, re.DOTALL)
+    if answer_match:
+        response_text = answer_match.group(1).strip()
+
     article, citation_ids, id_to_text = _parse_and_format_citations(response_text)
 
-    # Renumber citations
+    # Build snippet map from tool call traces (if available)
+    claude = gen.get("claude", {})
+    trajectory = claude.get("trajectory", [])
+    snippet_map: dict[str, dict[str, str]] = {}
+    if trajectory:
+        full_traces = build_full_traces(trajectory, claude.get("usage"))
+        snippet_map = build_snippet_map(full_traces)
+
+    # Build citations and references using snippet map for URL resolution
+    all_urls: dict[str, str] = {}  # url → ref_id
+    for ref_id, info in snippet_map.items():
+        if info.get("URL"):
+            all_urls[info["URL"]] = ref_id
+
+    # Populate citations_deduped and citations (matching DR-Tulu schema)
+    for url, ref_id in all_urls.items():
+        if ref_id in id_to_text:
+            output["citations_deduped"][url] = {
+                "facts": id_to_text[ref_id],
+                "url_content": (
+                    snippet_map[ref_id]["Title"] + "\n\n"
+                    + snippet_map[ref_id]["Snippet"]
+                ),
+            }
+            for fact in id_to_text[ref_id]:
+                output["citations"].append({
+                    "fact": fact,
+                    "ref_indx": ref_id,
+                    "url": url,
+                })
+
+    # Renumber citation IDs to sequential integers and build reference list
     references = []
     for i, cid in enumerate(citation_ids):
+        if cid in snippet_map and snippet_map[cid].get("URL"):
+            references.append(f"[{i + 1}] {snippet_map[cid]['URL']}")
+        else:
+            references.append(f"[{i + 1}]")
         article = article.replace(cid, str(i + 1))
-        references.append(f"[{i + 1}]")
 
     if re.search(r"[\u4e00-\u9fff]", article):
         output["article"] = article + "\n\n 参考文献: " + "\n".join(references)
@@ -163,12 +215,15 @@ class DRBEval(Eval):
             try:
                 formatted = _format_example(gen)
             except Exception:
-                logger.error("Failed to format DRB example %d", i)
+                logger.error("Failed to format DRB example %d", i, exc_info=True)
                 formatted = {"id": str(i), "article": "", "citations": []}
             drb_rows.append(formatted)
             results.append(SingleEvalResult(
                 id=str(i), score=None, metrics={},
-                metadata={"n_citations": len(formatted.get("citations", []))},
+                metadata={
+                    "n_citations": len(formatted.get("citations", [])),
+                    "n_citations_deduped": len(formatted.get("citations_deduped", {})),
+                },
             ))
 
         os.makedirs(self.output_dir, exist_ok=True)

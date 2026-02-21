@@ -78,14 +78,35 @@ def _get_benchmark(name: str, args: argparse.Namespace) -> Any:
     sys.exit(f"Error: unknown benchmark '{name}'")
 
 
+def _resolve_cite_prompt(args: argparse.Namespace) -> str | None:
+    """Return the citation system prompt addition, or None if disabled."""
+    cite_style = getattr(args, "cite_style", None)
+    if cite_style is None:
+        return None
+
+    from .prompts import BENCHMARK_CITE_STYLES, PROMPT_STYLES
+
+    # "auto" picks the benchmark-specific default style.
+    if cite_style == "auto":
+        cite_style = BENCHMARK_CITE_STYLES.get(args.benchmark, "long")
+
+    prompt = PROMPT_STYLES.get(cite_style)
+    if prompt is None:
+        sys.exit(f"Error: unknown cite style '{cite_style}'. "
+                 f"Choose from: {', '.join(PROMPT_STYLES)}")
+    return prompt
+
+
 def _make_run(args: argparse.Namespace):
     """Build a ``run_claude`` partial with CLI-level config baked in."""
     from .claude import run_claude
+    cite_prompt = _resolve_cite_prompt(args)
     return partial(
         run_claude,
         model=getattr(args, "model", "sonnet"),
         max_turns=getattr(args, "max_turns", 15),
         max_budget_usd=getattr(args, "max_budget_usd", None),
+        append_system_prompt=cite_prompt,
     )
 
 
@@ -187,6 +208,27 @@ def cmd_run(args: argparse.Namespace) -> None:
     logger.info("Saved eval results to %s", eval_path)
 
 
+def cmd_convert(args: argparse.Namespace) -> None:
+    """Convert generation data to DR-Tulu compatible format."""
+    from .compat import to_drtulu_format
+
+    gen_path = args.generation_file
+    if not os.path.exists(gen_path):
+        sys.exit(f"Error: file not found: {gen_path}")
+
+    with open(gen_path) as f:
+        gen_data = [json.loads(line) for line in f if line.strip()]
+
+    logger.info("Converting %d examples from %s", len(gen_data), gen_path)
+    converted = [to_drtulu_format(gen) for gen in gen_data]
+
+    out_path = gen_path.replace(".jsonl", "_drtulu.jsonl")
+    with open(out_path, "w") as f:
+        for row in converted:
+            f.write(json.dumps(row, default=str) + "\n")
+    logger.info("Saved DR-Tulu format to %s", out_path)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="python -m evals.run",
@@ -211,6 +253,12 @@ def main() -> None:
     model_args.add_argument("--model", "-m", default="sonnet")
     model_args.add_argument("--max-turns", type=int, default=15)
     model_args.add_argument("--max-budget-usd", type=float, default=None)
+    model_args.add_argument(
+        "--cite-style", default=None,
+        choices=["auto", "long", "short", "exact"],
+        help="Enable DR-Tulu compatible <cite> tags in output. "
+             "'auto' picks the benchmark-specific default style.",
+    )
 
     p = sub.add_parser("generate", parents=[common, model_args])
     p.set_defaults(func=cmd_generate)
@@ -221,6 +269,10 @@ def main() -> None:
 
     p = sub.add_parser("run", parents=[common, model_args])
     p.set_defaults(func=cmd_run)
+
+    p = sub.add_parser("convert", description="Convert gen data to DR-Tulu format")
+    p.add_argument("--generation-file", "-g", required=True)
+    p.set_defaults(func=cmd_convert)
 
     args = parser.parse_args()
     # --skill '' means no skill

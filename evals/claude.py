@@ -189,6 +189,10 @@ def run_claude(
 
     env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
 
+    # Enable hash-based reference IDs when citation prompts are active.
+    if append_system_prompt:
+        env["PAPER_SEARCH_HASH_IDS"] = "1"
+
     logger.info("claude -p  model=%s  max_turns=%d  prompt=%s…",
                 model, max_turns, prompt[:80])
 
