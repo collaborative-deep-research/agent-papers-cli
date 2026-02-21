@@ -16,7 +16,7 @@ Each benchmark question is sent to `claude -p` with a skill prefix (e.g. `/deep-
 ## Setup
 
 ```bash
-cd evals && uv pip install .
+cd evals && pip install -e .
 export OPENAI_API_KEY=...   # for grading (gpt-4.1-mini)
 ```
 
@@ -58,12 +58,70 @@ python -m evals.run run -b drb --data-path path/to/drb.jsonl -n 10
 | `--subset` | `all` | HealthBench: `all`, `hard`, `consensus` |
 | `--data-path` | none | Dataset path (required for sqa/drb) |
 
+## Output
+
+Results are saved to `evals/results/` (two files per run):
+
+### `{benchmark}_gen.jsonl` — Generation data
+
+One JSON object per example with the full research trajectory:
+
+```jsonc
+{
+  "item_id": "174539438139989436-s6",
+  "query": "How do pyrolysis temperature and heating rate affect...",
+  "field": "Geology",
+  "response_text": "## Deep Research Report: ...",
+  "rubric": [{"rubric_item": "Does the response specify...", "type": "Other"}, ...],
+  "claude": {
+    "result": "## Deep Research Report: ...",
+    "num_turns": 18,
+    "total_cost_usd": 0.157,
+    "session_id": "8c4c328a-...",
+    "is_error": false,
+    "subtype": "success",
+    "duration_ms": 119190,
+    "usage": { "input_tokens": 59, "output_tokens": 6496, ... },
+    "trajectory": [
+      {"type": "thinking", "text": "The user is asking me to..."},
+      {"type": "text", "text": "I'll conduct a comprehensive..."},
+      {"type": "tool_use", "name": "Bash", "input": {"command": "paper-search google web \"pyrolysis...\""}},
+      {"type": "tool_result", "content": "Found 10 results from Google\n\n[r1] Effect of..."},
+      {"type": "tool_use", "name": "Bash", "input": {"command": "paper-search semanticscholar papers \"biochar...\""}},
+      {"type": "tool_result", "content": "Found 10 results from Semantic Scholar\n\n[r1]..."},
+      ...
+    ]
+  }
+}
+```
+
+**Trajectory event types:**
+
+| Type | Description |
+|------|-------------|
+| `thinking` | Claude's internal reasoning (truncated to 1000 chars) |
+| `text` | Assistant text output |
+| `tool_use` | Tool call with `name` (e.g. `Bash`, `Skill`, `Read`) and `input` |
+| `tool_result` | Tool output (truncated to 2000 chars) |
+
+### `{benchmark}_eval.json` — Aggregate scores
+
+```json
+{
+  "score": 0.85,
+  "metrics": {
+    "coverage_score": 0.85,
+    "coverage_score:std": 0.12
+  }
+}
+```
+
 ## Architecture
 
 ```
 evals/
-├── run.py           CLI entry point
-├── claude.py         run_claude() — spawns `claude -p`, returns dict
+├── run.py           CLI entry point (generate / evaluate / run)
+├── claude.py         run_claude() — spawns `claude -p --output-format stream-json --verbose`
 ├── types.py          SingleEvalResult, EvalResult
 ├── common.py         map_with_progress, aggregate_results
 ├── graders.py        LLM grading (coverage + rubric)
@@ -79,7 +137,7 @@ evals/
 ### How it works
 
 1. Benchmark formats the question as `/deep-research <question>` (or another skill)
-2. `run_claude()` calls `claude -p "<prompt>" --output-format json`
+2. `run_claude()` calls `claude -p "<prompt>" --output-format stream-json --verbose`
 3. Claude Code runs in the project dir, loads CLAUDE.md, uses Bash for paper/paper-search
-4. JSON result gives us the answer text + metadata (turns, cost, session_id)
+4. Stream-JSON output is parsed into a structured dict with the final answer text, metadata (turns, cost, session_id), and the full **trajectory** of tool calls and results
 5. Grader (gpt-4.1-mini) scores the answer against the benchmark rubric

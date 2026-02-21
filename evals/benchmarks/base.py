@@ -29,8 +29,12 @@ class Eval(ABC):
         """Score a list of generated outputs."""
         ...
 
-    def __call__(self, run: Callable[..., dict]) -> EvalResult:
-        """Run end-to-end: generate, evaluate, aggregate."""
+    def __call__(self, run: Callable[..., dict]) -> tuple[list[dict[str, Any]], EvalResult]:
+        """Run end-to-end: generate, evaluate, aggregate.
+
+        Returns ``(gen_data, eval_result)`` so callers can persist the
+        full generation data (including trajectories) alongside scores.
+        """
         gen_data = self.generate(run)
         results = self.evaluate(gen_data)
-        return aggregate_results(results)
+        return gen_data, aggregate_results(results)

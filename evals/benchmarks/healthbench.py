@@ -144,7 +144,7 @@ class HealthBenchEval(Eval):
             evaluate_single, generation_data, num_threads=self.n_threads
         )
 
-    def __call__(self, run: Callable[..., dict]) -> EvalResult:
+    def __call__(self, run: Callable[..., dict]) -> tuple[list[dict[str, Any]], EvalResult]:
         """Override to use clipped-mean aggregation."""
         gen_data = self.generate(run)
         results = self.evaluate(gen_data)
@@ -167,7 +167,7 @@ class HealthBenchEval(Eval):
                 np.std([_clipped_mean(list(s)) for s in bootstrap])
             )
 
-        return EvalResult(
+        return gen_data, EvalResult(
             score=final_metrics.pop("score", None),
             metrics=final_metrics,
             per_example_results=per_example_results,

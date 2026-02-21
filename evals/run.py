@@ -147,20 +147,24 @@ def cmd_run(args: argparse.Namespace) -> None:
     run = _make_run(args)
 
     logger.info("Running %s end-to-end with %s", args.benchmark, args.model)
-    eval_result = benchmark(run)
+    gen_data, eval_result = benchmark(run)
     _print_results(args.benchmark, eval_result)
 
     os.makedirs(args.output_dir, exist_ok=True)
-    if eval_result.per_example_results:
-        gen_path = os.path.join(args.output_dir, f"{args.benchmark}_gen.jsonl")
-        with open(gen_path, "w") as f:
-            for row in eval_result.per_example_results:
-                f.write(json.dumps(row, default=str) + "\n")
+
+    # Save full generation data (includes trajectories).
+    gen_path = os.path.join(args.output_dir, f"{args.benchmark}_gen.jsonl")
+    with open(gen_path, "w") as f:
+        for row in gen_data:
+            f.write(json.dumps(row, default=str) + "\n")
+    logger.info("Saved %d generations to %s", len(gen_data), gen_path)
+
+    # Save eval scores.
     eval_path = os.path.join(args.output_dir, f"{args.benchmark}_eval.json")
     with open(eval_path, "w") as f:
         json.dump({"score": eval_result.score, "metrics": eval_result.metrics},
                   f, indent=2, default=str)
-    logger.info("Saved results to %s", args.output_dir)
+    logger.info("Saved eval results to %s", eval_path)
 
 
 def main() -> None:
