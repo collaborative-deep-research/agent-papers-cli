@@ -103,15 +103,23 @@ def _print_results(benchmark_name: str, eval_result) -> None:
     print(f"{'='*60}\n")
 
 
+def _output_dir(args: argparse.Namespace) -> str:
+    """Build output directory: ``{output_dir}/{model}/``."""
+    model = getattr(args, "model", "sonnet")
+    d = os.path.join(args.output_dir, model)
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
 def cmd_generate(args: argparse.Namespace) -> None:
     benchmark = _get_benchmark(args.benchmark, args)
     run = _make_run(args)
+    out_dir = _output_dir(args)
 
     logger.info("Generating with %s on %s", args.model, args.benchmark)
     gen_data = benchmark.generate(run)
 
-    os.makedirs(args.output_dir, exist_ok=True)
-    out_path = os.path.join(args.output_dir, f"{args.benchmark}_gen.jsonl")
+    out_path = os.path.join(out_dir, f"{args.benchmark}_gen.jsonl")
     with open(out_path, "w") as f:
         for row in gen_data:
             f.write(json.dumps(row, default=str) + "\n")
@@ -134,8 +142,9 @@ def cmd_evaluate(args: argparse.Namespace) -> None:
     eval_result = aggregate_results(results)
     _print_results(args.benchmark, eval_result)
 
-    os.makedirs(args.output_dir, exist_ok=True)
-    out_path = os.path.join(args.output_dir, f"{args.benchmark}_eval.json")
+    # Save eval alongside the generation file.
+    out_dir = os.path.dirname(gen_path) or _output_dir(args)
+    out_path = os.path.join(out_dir, f"{args.benchmark}_eval.json")
     with open(out_path, "w") as f:
         json.dump({"score": eval_result.score, "metrics": eval_result.metrics},
                   f, indent=2, default=str)
@@ -145,22 +154,21 @@ def cmd_evaluate(args: argparse.Namespace) -> None:
 def cmd_run(args: argparse.Namespace) -> None:
     benchmark = _get_benchmark(args.benchmark, args)
     run = _make_run(args)
+    out_dir = _output_dir(args)
 
     logger.info("Running %s end-to-end with %s", args.benchmark, args.model)
     gen_data, eval_result = benchmark(run)
     _print_results(args.benchmark, eval_result)
 
-    os.makedirs(args.output_dir, exist_ok=True)
-
     # Save full generation data (includes trajectories).
-    gen_path = os.path.join(args.output_dir, f"{args.benchmark}_gen.jsonl")
+    gen_path = os.path.join(out_dir, f"{args.benchmark}_gen.jsonl")
     with open(gen_path, "w") as f:
         for row in gen_data:
             f.write(json.dumps(row, default=str) + "\n")
     logger.info("Saved %d generations to %s", len(gen_data), gen_path)
 
     # Save eval scores.
-    eval_path = os.path.join(args.output_dir, f"{args.benchmark}_eval.json")
+    eval_path = os.path.join(out_dir, f"{args.benchmark}_eval.json")
     with open(eval_path, "w") as f:
         json.dump({"score": eval_result.score, "metrics": eval_result.metrics},
                   f, indent=2, default=str)
