@@ -104,9 +104,21 @@ def _print_results(benchmark_name: str, eval_result) -> None:
 
 
 def _output_dir(args: argparse.Namespace) -> str:
-    """Build output directory: ``{output_dir}/{model}/``."""
+    """Build output directory: ``{output_dir}/{model}/{skill}/``.
+
+    Examples::
+
+        evals/results/sonnet/deep-research/
+        evals/results/haiku/research-coordinator/
+        evals/results/sonnet/no-skill/
+    """
     model = getattr(args, "model", "sonnet")
-    d = os.path.join(args.output_dir, model)
+    skill = getattr(args, "skill", None)
+    # skill=None means benchmark default (deep-research for all current benchmarks).
+    skill_name = skill if skill is not None else "deep-research"
+    if not skill_name:
+        skill_name = "no-skill"
+    d = os.path.join(args.output_dir, model, skill_name)
     os.makedirs(d, exist_ok=True)
     return d
 

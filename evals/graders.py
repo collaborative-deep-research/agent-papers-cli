@@ -7,11 +7,17 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from typing import Any
 
 import openai
+from dotenv import load_dotenv
 from tenacity import retry, stop_after_attempt, wait_exponential
+
+# Load API keys from .env (cwd) and ~/.papers/.env (persistent).
+load_dotenv()
+load_dotenv(os.path.expanduser("~/.papers/.env"))
 
 logger = logging.getLogger(__name__)
 
