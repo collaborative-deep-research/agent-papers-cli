@@ -123,9 +123,8 @@ def _pair_tool_events(trajectory: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if ev.get("type") == "tool_use":
             call: dict[str, Any] = {
                 "tool_name": ev.get("name", ""),
-                "query": _extract_query(ev),
+                "input": ev.get("input", {}),
                 "output": "",
-                "generated_text": "",
             }
             # Look for the matching tool_result
             if i + 1 < len(trajectory) and trajectory[i + 1].get("type") == "tool_result":
@@ -135,18 +134,115 @@ def _pair_tool_events(trajectory: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return calls
 
 
-def _extract_query(tool_use_event: dict[str, Any]) -> str:
-    """Extract the user's query from a tool_use event."""
-    inp = tool_use_event.get("input", {})
-    if isinstance(inp, dict):
-        # paper-search commands use "query" or first positional arg
-        return (
-            inp.get("query", "")
-            or inp.get("command", "")
-            or inp.get("url", "")
-            or str(inp)
+# Maps CLI subcommands to DR-Tulu tool names.
+_TOOL_NAME_MAP: dict[str, str] = {
+    "google web": "google_search",
+    "google scholar": "google_search",
+    "semanticscholar papers": "snippet_search",
+    "semanticscholar snippets": "snippet_search",
+    "semanticscholar citations": "snippet_search",
+    "semanticscholar references": "snippet_search",
+    "pubmed": "pubmed_search",
+    "browse": "browse_webpage",
+}
+
+
+def _classify_tool_call(raw: dict[str, Any]) -> tuple[str, str]:
+    """Return ``(tool_name, query)`` by inspecting the Bash command.
+
+    Parses ``paper-search <backend> <subcommand> "query"`` to extract the
+    DR-Tulu compatible tool name and the user's search query.
+    """
+    inp = raw.get("input", {})
+    cmd = inp.get("command", "") if isinstance(inp, dict) else str(inp)
+
+    # Extract quoted query from command
+    query_match = re.search(r'''['"]([^'"]+)['"]''', cmd)
+    query = query_match.group(1) if query_match else cmd
+
+    # Detect tool type from command
+    for pattern, name in _TOOL_NAME_MAP.items():
+        if pattern in cmd:
+            return name, query
+
+    # paper read / paper outline / other tools
+    if "paper " in cmd and "paper-search" not in cmd:
+        return "paper_read", query
+
+    return raw.get("tool_name", "unknown"), query
+
+
+def _build_tool_call(idx: int, raw: dict[str, Any]) -> dict[str, Any]:
+    """Convert a single paired tool_use/tool_result into DR-Tulu format.
+
+    Produces::
+
+        {
+            "tool_name": "google_search",
+            "call_id": "bcd6aec2",
+            "query": "transformer attention mechanism",
+            "called": true,
+            "output": "Title: ...\\nURL: ...\\nSnippet: ...\\n\\nTitle: ...",
+            "documents": [{id, title, url, snippet, ...}, ...],
+            "generated_text": "<snippet id=...>...</snippet>...",
+            "parsed_results": {ref_id: {Title, URL, Snippet}},
+        }
+    """
+    tool_name, query = _classify_tool_call(raw)
+    output_text = raw["output"]
+    parsed = parse_search_results(output_text)
+
+    # Build documents array (DR-Tulu schema)
+    documents: list[dict[str, Any]] = []
+    for ref_id, info in parsed.items():
+        documents.append({
+            "id": ref_id,
+            "title": info["Title"],
+            "url": info["URL"],
+            "snippet": info["Snippet"],
+            "text": None,
+            "summary": None,
+            "score": None,
+            "error": None,
+        })
+
+    # Build DR-Tulu style output (Title:\nURL:\nSnippet:\n format)
+    drtulu_output_parts = []
+    for info in parsed.values():
+        lines = [f"Title: {info['Title']}"]
+        if info["URL"]:
+            lines.append(f"URL: {info['URL']}")
+        lines.append(f"Snippet: {info['Snippet']}")
+        drtulu_output_parts.append("\n".join(lines))
+    drtulu_output = "\n\n".join(drtulu_output_parts)
+
+    # Build snippet-format generated_text for DR-Tulu compatibility
+    snippet_parts = []
+    for ref_id, info in parsed.items():
+        snippet_parts.append(
+            f'<snippet id={ref_id}>\n'
+            f'Title: {info["Title"]}\n'
+            f'URL: {info["URL"]}\n'
+            f'Snippet: {info["Snippet"]}\n'
+            f'</snippet>'
         )
-    return str(inp)
+
+    # Use first document's hash as call_id if available, else fallback
+    call_id = documents[0]["id"] if documents else f"call_{idx}"
+
+    return {
+        "tool_name": tool_name,
+        "call_id": call_id,
+        "query": query,
+        "called": True,
+        "timeout": False,
+        "error": "",
+        "output": drtulu_output,
+        "documents": documents,
+        "generated_text": "\n".join(snippet_parts),
+        "parsed_results": parsed,
+        "raw_output_text": output_text,
+    }
 
 
 def build_full_traces(
@@ -159,36 +255,7 @@ def build_full_traces(
     and ``generated_text`` (reconstructed from trajectory events).
     """
     raw_calls = _pair_tool_events(trajectory)
-
-    # Assign call_ids by parsing reference IDs from each tool result.
-    # If a tool result contains [r1], [r2], etc., we use those as sub-IDs.
-    tool_calls: list[dict[str, Any]] = []
-    for idx, call in enumerate(raw_calls):
-        output_text = call["output"]
-        parsed = parse_search_results(output_text)
-
-        # Build snippet-format generated_text for DR-Tulu compatibility
-        snippet_parts = []
-        for ref_id, info in parsed.items():
-            snippet_parts.append(
-                f'<snippet id={ref_id}>\n'
-                f'Title: {info["Title"]}\n'
-                f'URL: {info["URL"]}\n'
-                f'Snippet: {info["Snippet"]}\n'
-                f'</snippet>'
-            )
-
-        call_id = f"call_{idx}"
-        tool_calls.append({
-            "call_id": call_id,
-            "tool_name": call["tool_name"],
-            "query": call["query"],
-            "output": output_text,
-            "generated_text": "\n".join(snippet_parts),
-            # Flatten parsed results with call_id-based sub-IDs for
-            # backwards compat, but also keep original ref_ids
-            "parsed_results": parsed,
-        })
+    tool_calls = [_build_tool_call(i, c) for i, c in enumerate(raw_calls)]
 
     # Reconstruct generated_text (rough approximation of the full trace)
     parts: list[str] = []
@@ -199,8 +266,7 @@ def build_full_traces(
         elif t == "text":
             parts.append(ev.get("text", ""))
         elif t == "tool_use":
-            name = ev.get("name", "")
-            query = _extract_query(ev)
+            name, query = _classify_tool_call(ev)
             parts.append(f'<call_tool name="{name}">{query}</call_tool>')
         elif t == "tool_result":
             content = ev.get("content", "")
