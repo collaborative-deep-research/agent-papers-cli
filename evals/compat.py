@@ -249,6 +249,63 @@ def extract_snippet_text(full_traces: dict[str, Any]) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Answer extraction
+# ---------------------------------------------------------------------------
+
+_ANSWER_RE = re.compile(r"<answer>(.*?)</answer>", re.DOTALL)
+
+
+def extract_final_response(gen: dict[str, Any]) -> str:
+    """Extract the best final response text from a generation dict.
+
+    Search order:
+    1. ``<answer>`` tags in ``response_text`` / ``claude.result``
+    2. ``<answer>`` tags in trajectory text events (scanned last-to-first,
+       since the final answer is typically the last one)
+    3. Full ``response_text`` as-is (fallback)
+
+    When ``<answer>`` tags are found the *inner* content is returned
+    (stripped of the tags themselves).
+    """
+    # Candidate texts — check the top-level fields first.
+    response_text = gen.get("response_text", "") or ""
+    claude = gen.get("claude", {})
+    result_text = claude.get("result", "") or ""
+
+    for text in (response_text, result_text):
+        m = _ANSWER_RE.search(text)
+        if m:
+            return m.group(1).strip()
+
+    # Scan trajectory text events (last → first) for <answer> tags.
+    trajectory = claude.get("trajectory", [])
+    for ev in reversed(trajectory):
+        if ev.get("type") == "text":
+            m = _ANSWER_RE.search(ev.get("text", ""))
+            if m:
+                return m.group(1).strip()
+
+    # No <answer> tags found anywhere — concatenate all trajectory text
+    # events as a richer fallback than the (often-summarised) result field.
+    text_parts = [
+        ev.get("text", "")
+        for ev in trajectory
+        if ev.get("type") == "text" and ev.get("text")
+    ]
+    if text_parts:
+        full_text = "\n\n".join(text_parts)
+        # One more check on the concatenated text
+        m = _ANSWER_RE.search(full_text)
+        if m:
+            return m.group(1).strip()
+        # Prefer the longer of concatenated-text vs response_text
+        if len(full_text) > len(response_text):
+            return full_text
+
+    return response_text or result_text
+
+
+# ---------------------------------------------------------------------------
 # Top-level conversion: our gen dict → DR-Tulu gen dict
 # ---------------------------------------------------------------------------
 
@@ -283,6 +340,6 @@ def to_drtulu_format(gen: dict[str, Any]) -> dict[str, Any]:
     return {
         "example_id": str(example_id),
         "problem": problem,
-        "final_response": gen.get("response_text", "") or claude.get("result", ""),
+        "final_response": extract_final_response(gen),
         "full_traces": build_full_traces(trajectory, usage),
     }
