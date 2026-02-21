@@ -30,8 +30,78 @@ Key DR-Tulu fields::
 
 from __future__ import annotations
 
+import ast
 import re
 from typing import Any
+
+
+# ---------------------------------------------------------------------------
+# Unwrap tool result content
+# ---------------------------------------------------------------------------
+
+
+_STDOUT_RE = re.compile(r"^\{'stdout': '(.*)", re.DOTALL)
+_STDOUT_JSON_RE = re.compile(r'^{"stdout": "(.*)', re.DOTALL)
+_FILE_CONTENT_RE = re.compile(r"'content': '(.*)", re.DOTALL)
+
+
+def _unwrap_tool_content(content: str) -> str:
+    """Extract the actual output text from a tool_result content string.
+
+    Handles several formats found in saved generation data:
+
+    - ``"{'stdout': 'Found 10 results...\\n'}"``  (stringified Python dict)
+    - ``"Found 10 results..."``  (already plain text)
+    - ``"Error: Exit code 1\\n..."``  (error strings)
+    - ``"{'type': 'text', 'file': {'content': '...'}}"``  (file content)
+
+    Note: content may be truncated (old 2000-char limit), so
+    ``ast.literal_eval`` often fails on incomplete strings.  We use regex
+    to extract the stdout payload instead.
+    """
+    if not content:
+        return content
+
+    # Fast path: doesn't look like a Python dict repr
+    if not content.startswith(("{", '"{')):
+        return content
+
+    # Try full parse first (works when content isn't truncated)
+    try:
+        obj = ast.literal_eval(content)
+        if isinstance(obj, dict):
+            if "stdout" in obj:
+                return obj["stdout"]
+            if "file" in obj and isinstance(obj["file"], dict):
+                return obj["file"].get("content", content)
+        return content
+    except (ValueError, SyntaxError):
+        pass
+
+    # Regex fallback for truncated strings: grab everything after
+    # {'stdout': ' (unescape \\n → \n, \\t → \t, \\' → ')
+    m = _STDOUT_RE.match(content) or _STDOUT_JSON_RE.match(content)
+    if m:
+        raw = m.group(1)
+        # Strip trailing incomplete quote/brace if present
+        raw = raw.rstrip("}'\"")
+        # Unescape common Python string escapes
+        raw = (
+            raw.replace("\\n", "\n")
+            .replace("\\t", "\t")
+            .replace("\\'", "'")
+            .replace("\\\\", "\\")
+        )
+        return raw
+
+    # File content fallback
+    m = _FILE_CONTENT_RE.search(content)
+    if m:
+        raw = m.group(1).rstrip("}'\"")
+        raw = raw.replace("\\n", "\n").replace("\\'", "'").replace("\\\\", "\\")
+        return raw
+
+    return content
 
 
 # ---------------------------------------------------------------------------
@@ -128,7 +198,8 @@ def _pair_tool_events(trajectory: list[dict[str, Any]]) -> list[dict[str, Any]]:
             }
             # Look for the matching tool_result
             if i + 1 < len(trajectory) and trajectory[i + 1].get("type") == "tool_result":
-                call["output"] = trajectory[i + 1].get("content", "")
+                raw = trajectory[i + 1].get("content", "")
+                call["output"] = _unwrap_tool_content(raw)
             calls.append(call)
         i += 1
     return calls

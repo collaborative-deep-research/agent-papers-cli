@@ -49,6 +49,27 @@ def _find_claude() -> str:
 CLAUDE_BIN = _find_claude()
 
 
+def _extract_tool_content(result_data: Any) -> str:
+    """Extract the useful text from a tool_use_result payload.
+
+    Bash tool results are dicts like ``{"stdout": "...", "stderr": "..."}``.
+    Skill tool results are dicts like ``{"success": true, ...}``.
+    Plain strings are returned as-is.
+    """
+    if isinstance(result_data, str):
+        return result_data
+    if isinstance(result_data, dict):
+        # Bash tool — prefer stdout
+        if "stdout" in result_data:
+            return result_data["stdout"]
+        # File content
+        if "file" in result_data and isinstance(result_data["file"], dict):
+            return result_data["file"].get("content", str(result_data))
+        # Skill tool or other — keep the full dict for context
+        return json.dumps(result_data, default=str)
+    return str(result_data)
+
+
 def _parse_stream_json(raw: str) -> dict[str, Any]:
     """Parse stream-json (NDJSON) output into a structured result dict.
 
@@ -115,10 +136,10 @@ def _parse_stream_json(raw: str) -> dict[str, Any]:
         # Tool results appear as type="user" with a tool_use_result key.
         elif ev_type == "user" and "tool_use_result" in ev:
             result_data = ev["tool_use_result"]
-            content = result_data if isinstance(result_data, str) else str(result_data)
+            content = _extract_tool_content(result_data)
             trajectory.append({
                 "type": "tool_result",
-                "content": content[:2000],
+                "content": content[:4000],
             })
         elif ev_type == "user" and "message" in ev:
             # Fallback: tool result may also be in message.content
