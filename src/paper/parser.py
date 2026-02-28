@@ -585,14 +585,24 @@ def _extract_metadata(
     page1_lines = [ln for ln in lines if ln.page == 0]
     title = ""
     if page1_lines:
-        # Title = largest font on page 1, excluding arxiv header
+        # Title = all lines at the largest font size on page 1,
+        # excluding the arxiv header.  Multi-line titles (e.g.
+        # "Tülu 3: Pushing Frontiers in Open Language Model\n
+        #  Post-Training") span multiple _Line objects at the
+        # same font size; we join them with a space.
         candidates = [
             ln for ln in page1_lines
             if not _ARXIV_HEADER_RE.search(ln.text)
         ]
         if candidates:
-            largest = max(candidates, key=lambda ln: ln.font_size)
-            title = largest.text.strip()
+            title_size_local = max(ln.font_size for ln in candidates)
+            title_lines = [
+                ln for ln in candidates
+                if ln.font_size >= title_size_local - 0.5
+            ]
+            # Sort by vertical position so the title reads top-to-bottom
+            title_lines.sort(key=lambda ln: ln.bbox[1])
+            title = " ".join(ln.text.strip() for ln in title_lines)
 
     pdf_meta = doc_fitz.metadata or {}
 

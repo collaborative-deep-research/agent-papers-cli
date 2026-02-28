@@ -1,8 +1,12 @@
 """Tests for paper.parser — PDF parsing, heading detection, sentence splitting."""
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from paper.parser import (
+    _Line,
+    _extract_metadata,
     _is_false_positive_heading,
     _looks_like_section_heading,
     _merge_heading_fragments,
@@ -119,3 +123,122 @@ class TestMergeHeadingFragments:
     def test_single_heading(self):
         headings = [{"heading": "Abstract", "level": 1, "page": 0, "char_start": 0, "char_end": 8, "font_size": 12.0}]
         assert _merge_heading_fragments(headings) == headings
+
+
+def _make_mock_fitz():
+    """Create a minimal mock fitz.Document for _extract_metadata tests."""
+    doc = MagicMock()
+    doc.metadata = {"title": "", "author": ""}
+    return doc
+
+
+class TestExtractMetadata:
+    """Tests for _extract_metadata — title extraction from PDF lines.
+
+    The title is determined by finding all lines on page 0 with the largest
+    font size (excluding arxiv headers).  Multi-line titles that span
+    multiple _Line objects at the same font size are joined with a space.
+
+    See: https://github.com/collaborative-deep-research/agent-papers-cli/issues/14
+    """
+
+    def test_single_line_title(self):
+        """Standard single-line title is extracted correctly."""
+        lines = [
+            _Line("Is ChatGPT A Good Translator?", font_size=17.0,
+                   font_name="Times", is_bold=True, page=0,
+                   bbox=(72, 50, 500, 68)),
+            _Line("Some Author", font_size=10.0,
+                   font_name="Times", is_bold=False, page=0,
+                   bbox=(72, 80, 300, 92)),
+        ]
+        meta = _extract_metadata(
+            _make_mock_fitz(), lines, body_size=10.0, arxiv_id="2301.08745"
+        )
+        assert meta.title == "Is ChatGPT A Good Translator?"
+
+    def test_multiline_title(self):
+        """Multi-line titles should be joined into a single string.
+
+        Example: the Tülu 3 paper has a title that spans two lines:
+          Line 1: "Tülu 3: Pushing Frontiers in Open Language Model"
+          Line 2: "Post-Training"
+        Both lines share the same (largest) font size on page 0.
+        """
+        lines = [
+            _Line("arXiv:2411.15124v2 [cs.CL] 25 Nov 2024", font_size=8.0,
+                   font_name="CMR", is_bold=False, page=0,
+                   bbox=(72, 10, 300, 18)),
+            _Line("Tülu 3: Pushing Frontiers in Open Language Model",
+                   font_size=17.0, font_name="Times", is_bold=True, page=0,
+                   bbox=(72, 50, 540, 68)),
+            _Line("Post-Training", font_size=17.0,
+                   font_name="Times", is_bold=True, page=0,
+                   bbox=(72, 70, 200, 88)),
+            _Line("Author Name et al.", font_size=10.0,
+                   font_name="Times", is_bold=False, page=0,
+                   bbox=(72, 100, 300, 112)),
+        ]
+        meta = _extract_metadata(
+            _make_mock_fitz(), lines, body_size=10.0, arxiv_id="2411.15124"
+        )
+        assert meta.title == (
+            "Tülu 3: Pushing Frontiers in Open Language Model Post-Training"
+        )
+
+    def test_multiline_title_sorted_by_position(self):
+        """Lines should be joined in top-to-bottom order, not insertion order."""
+        lines = [
+            _Line("Second Line of Title", font_size=17.0,
+                   font_name="Times", is_bold=True, page=0,
+                   bbox=(72, 70, 400, 88)),
+            _Line("First Line of Title:", font_size=17.0,
+                   font_name="Times", is_bold=True, page=0,
+                   bbox=(72, 50, 400, 68)),
+        ]
+        meta = _extract_metadata(
+            _make_mock_fitz(), lines, body_size=10.0, arxiv_id="test"
+        )
+        assert meta.title == "First Line of Title: Second Line of Title"
+
+    def test_arxiv_header_excluded_from_title(self):
+        """arXiv header lines should not be included in the title."""
+        lines = [
+            _Line("arXiv:2301.08745v1 [cs.CL] 20 Jan 2023", font_size=20.0,
+                   font_name="CMR", is_bold=False, page=0,
+                   bbox=(72, 10, 400, 22)),
+            _Line("Actual Paper Title", font_size=17.0,
+                   font_name="Times", is_bold=True, page=0,
+                   bbox=(72, 50, 400, 68)),
+        ]
+        meta = _extract_metadata(
+            _make_mock_fitz(), lines, body_size=10.0, arxiv_id="2301.08745"
+        )
+        assert meta.title == "Actual Paper Title"
+
+    def test_subtitle_slightly_smaller_font_included(self):
+        """Lines within 0.5pt of the title font size should be included.
+
+        Some PDFs use a very slightly different font size for the
+        subtitle line (e.g. 16.8 vs 17.0) — the 0.5pt tolerance
+        ensures these are captured.
+        """
+        lines = [
+            _Line("Main Title", font_size=17.0,
+                   font_name="Times", is_bold=True, page=0,
+                   bbox=(72, 50, 400, 68)),
+            _Line("Subtitle Continues Here", font_size=16.8,
+                   font_name="Times", is_bold=True, page=0,
+                   bbox=(72, 70, 400, 88)),
+        ]
+        meta = _extract_metadata(
+            _make_mock_fitz(), lines, body_size=10.0, arxiv_id="test"
+        )
+        assert meta.title == "Main Title Subtitle Continues Here"
+
+    def test_fallback_to_pdf_metadata(self):
+        """When no lines exist, fall back to fitz document metadata."""
+        doc = _make_mock_fitz()
+        doc.metadata = {"title": "Fallback Title", "author": "Some Author"}
+        meta = _extract_metadata(doc, [], body_size=10.0, arxiv_id="test")
+        assert meta.title == "Fallback Title"
