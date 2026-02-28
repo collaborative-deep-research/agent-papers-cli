@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-papers-cli"
-version = "0.1.0"
+version = "0.2.0"
 description = "Building the infra for Claude Code-native deep research"
 readme = "README.md"
 requires-python = ">=3.10"
