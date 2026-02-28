@@ -21,6 +21,11 @@ import pysbd
 from paper.models import Box, Document, Link, Metadata, Section, Sentence, Span
 from paper import storage
 
+# Font-size tolerance (in points) for grouping multi-line title lines.
+# Some PDFs use a very slightly different size for a subtitle line
+# (e.g. 16.8pt vs 17.0pt); this tolerance captures those.
+_TITLE_FONT_TOLERANCE_PT = 0.5
+
 # Patterns for filtering false-positive headings
 _ARXIV_HEADER_RE = re.compile(r"arXiv:\d+\.\d+", re.IGNORECASE)
 _SECTION_NUM_RE = re.compile(r"^[A-Z]?\.?\d*\.?\d*$")  # "1", "2.1", "A", "A.1"
@@ -585,14 +590,24 @@ def _extract_metadata(
     page1_lines = [ln for ln in lines if ln.page == 0]
     title = ""
     if page1_lines:
-        # Title = largest font on page 1, excluding arxiv header
+        # Title = all lines at the largest font size on the first page,
+        # excluding the arxiv header. Example: a multi-line title like
+        # "Tülu 3: Pushing Frontiers in Open Language Model Post-Training"
+        # spans multiple _Line objects at the same font size; we join them
+        # with a space.
         candidates = [
             ln for ln in page1_lines
             if not _ARXIV_HEADER_RE.search(ln.text)
         ]
         if candidates:
-            largest = max(candidates, key=lambda ln: ln.font_size)
-            title = largest.text.strip()
+            title_size_local = max(ln.font_size for ln in candidates)
+            title_lines = [
+                ln for ln in candidates
+                if ln.font_size >= title_size_local - _TITLE_FONT_TOLERANCE_PT
+            ]
+            # Sort by vertical position so the title reads top-to-bottom
+            title_lines.sort(key=lambda ln: ln.bbox[1])
+            title = " ".join(ln.text.strip() for ln in title_lines)
 
     pdf_meta = doc_fitz.metadata or {}
 

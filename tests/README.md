@@ -7,7 +7,8 @@
 | File | What it tests |
 |---|---|
 | `test_models.py` | Data model serialization (Document save/load roundtrip, links) |
-| `test_parser.py` | Heading detection heuristics, sentence splitting, fragment merging |
+| `test_parser.py` | Heading detection heuristics, sentence splitting, fragment merging, title extraction (`_extract_metadata`) |
+| `test_api.py` | Public API surface verification (imports from `search.api` and `paper.api`) |
 | `test_cli.py` | CLI smoke tests (help output, flag presence, error handling) |
 | `test_links.py` | Citation detection, ref registry building, `goto` rendering |
 | `test_fetcher.py` | ArXiv ID resolution, local PDF ID generation (`{stem}-{hash8}`), local metadata saving |
@@ -46,6 +47,7 @@ uv run pytest tests/test_integration.py -v
 | `2502.13811` | *On the Duality between Gradient Transformations and Adapters* | **Outline-based** (20 TOC entries) | Caught a critical bug: outline headings from `get_toc()` had no `char_start` offsets, so `_segment_sections` defaulted every section to offset 0 → all sections contained the entire document text. Fixed by `_resolve_outline_offsets()`. |
 | `2302.13971` | *LLaMA: Open and Efficient Foundation Language Models* | **Font-based** (no TOC) | Exercises the font-size heuristic path. Used during initial development as the primary test paper. No TOC in the PDF, so headings are detected by comparing font sizes to body text. |
 | `2505.21451` | *Words Like Knives: Backstory-Personalized Modeling and Detection of Violent Communication* | **Font-based** (no TOC) | Stress-tests heading detection robustness: author names at heading font size (♣ ♢ ♠ symbols), bold body text containing heading keywords, arXiv header at larger font than title, multi-line wrapped headings, and small-caps section titles. |
+| `2511.19399` | *DR Tulu: Reinforcement Learning with Evolving Rubrics for Deep Research* | **Font-based** (no TOC) | Tests multi-line title extraction ([#14](https://github.com/collaborative-deep-research/agent-papers-cli/issues/14)). Title spans two lines at 20.7pt: "DR Tulu: Reinforcement Learning with" + "Evolving Rubrics for Deep Research". Before the fix, only the first line was captured. |
 
 ### Known edge cases
 
