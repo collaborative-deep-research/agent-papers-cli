@@ -216,3 +216,51 @@ class TestTrickyFontBasedParsing:
     def test_has_citations(self, doc_21451: Document):
         citations = [lk for lk in doc_21451.links if lk.kind == "citation"]
         assert len(citations) > 0
+
+
+# ---------------------------------------------------------------------------
+# 2511.19399 — Font-based parsing with multi-line title
+#
+# No PDF outline.  Tests that multi-line titles are correctly joined.
+# The title "DR Tulu: Reinforcement Learning with / Evolving Rubrics
+# for Deep Research" spans two lines at the same font size (20.7pt).
+# See: https://github.com/collaborative-deep-research/agent-papers-cli/issues/14
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="module")
+def doc_19399() -> Document:
+    doc = _load_if_cached("2511.19399")
+    if doc is None:
+        pytest.skip("Paper 2511.19399 not cached (run: uv run paper outline 2511.19399)")
+    return doc
+
+
+class TestMultilineTitle:
+    """Tests for papers with multi-line titles (issue #14)."""
+
+    def test_full_title_captured(self, doc_19399: Document):
+        """Title should include text from both lines, not just the first."""
+        title = doc_19399.metadata.title
+        assert "DR Tulu" in title
+        assert "Evolving Rubrics" in title, (
+            f"Second line of title missing — got: {title!r}"
+        )
+
+    def test_title_is_single_line(self, doc_19399: Document):
+        """Joined title should not contain newlines."""
+        assert "\n" not in doc_19399.metadata.title
+
+    def test_sections_detected(self, doc_19399: Document):
+        assert len(doc_19399.sections) >= 10
+
+    def test_has_introduction(self, doc_19399: Document):
+        headings = [s.heading for s in doc_19399.sections]
+        assert any("Introduction" in h for h in headings)
+
+    def test_sections_have_content(self, doc_19399: Document):
+        sections_with_content = [s for s in doc_19399.sections if s.content]
+        assert len(sections_with_content) >= 10
+
+    def test_metadata(self, doc_19399: Document):
+        assert doc_19399.metadata.arxiv_id == "2511.19399"
+        assert doc_19399.metadata.url == "https://arxiv.org/abs/2511.19399"
