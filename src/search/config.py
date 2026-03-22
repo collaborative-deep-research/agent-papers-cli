@@ -19,12 +19,12 @@ Required keys per command:
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 from dotenv import load_dotenv
 
+from paper.storage import PAPERS_DIR
+
 # Persistent config location (shared with paper CLI)
-PAPERS_DIR = Path.home() / ".papers"
 PERSISTENT_ENV = PAPERS_DIR / ".env"
 
 # Load in priority order (earlier loads win because dotenv doesn't overwrite existing)

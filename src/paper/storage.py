@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-PAPERS_DIR = Path.home() / ".papers"
+PAPERS_DIR = Path(os.environ.get("PAPERS_CACHE_DIR", Path.home() / ".papers"))
 
 
 def _sanitize_paper_id(paper_id: str) -> str:

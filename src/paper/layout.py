@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 import fitz  # PyMuPDF
 
 from paper.models import Box, LayoutElement
-from paper.storage import layout_path, has_layout
+from paper.storage import PAPERS_DIR, layout_path, has_layout
 
 if TYPE_CHECKING:
     from doclayout_yolo import YOLOv10
@@ -56,7 +56,7 @@ _model_instance: YOLOv10 | None = None
 # ------------------------------------------------------------------
 
 def _models_dir() -> Path:
-    d = Path.home() / ".papers" / ".models"
+    d = PAPERS_DIR / ".models"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
