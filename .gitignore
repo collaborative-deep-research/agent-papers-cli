@@ -11,3 +11,6 @@ venv/
 .env
 .pytest_cache/
 .mypy_cache/
+evals/results/*
+!evals/results/.gitkeep
+evals/data/
